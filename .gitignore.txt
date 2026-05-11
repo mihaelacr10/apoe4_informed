@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon May 11 06:23:57 2026
+
+@author: mihaelacroitor
+"""
+
+# Ignore virtual environments
+venv/
+env/
+.conda/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# STRONGLY RECOMMENDED: Ignore your data folder so you don't leak ADNI data!
+data/
+*.csv
+*.nii
+*.gz
