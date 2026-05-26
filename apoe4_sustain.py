@@ -126,6 +126,8 @@ class AbstractSustain(ABC):
 
         ml_sequence_prev_EM                 = []
         ml_f_prev_EM                        = []
+        if self.apoe_flag:
+            ml_genetic_weights_prev_EM          = []
 
         pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
         if not os.path.isdir(pickle_dir):
@@ -150,11 +152,18 @@ class AbstractSustain(ABC):
                 samples_likelihood          = loaded_variables["samples_likelihood"]
                 samples_sequence            = loaded_variables["samples_sequence"]
                 samples_f                   = loaded_variables["samples_f"]
+                if self.apoe_flag:
+                    samples_genetic_weights = loaded_variables["samples_genetic_weights"]
 
                 ml_sequence_EM              = loaded_variables["ml_sequence_EM"]
                 ml_sequence_prev_EM         = loaded_variables["ml_sequence_prev_EM"]
                 ml_f_EM                     = loaded_variables["ml_f_EM"]
                 ml_f_prev_EM                = loaded_variables["ml_f_prev_EM"]
+                
+                if self.apoe_flag:
+                    ml_genetic_weights_EM   = loaded_variables["ml_genetic_weights_EM"]
+                    ml_genetic_weights_prev_EM = loaded_variables["ml_genetic_weights_prev_EM"]
+                
 
                 pickle_file.close()
             else:
@@ -168,7 +177,7 @@ class AbstractSustain(ABC):
                     ml_f_mat_EM,               \
                     ml_likelihood_mat_EM,      \
                     ml_genetic_weights_EM,     \
-                    ml_genetic_weights_mat_EM  = self._estimate_ml_sustain_model_nplus1_clusters(self.__sustainData, ml_sequence_prev_EM, ml_f_prev_EM) #self.__estimate_ml_sustain_model_nplus1_clusters(self.__data, ml_sequence_prev_EM, ml_f_prev_EM)
+                    ml_genetic_weights_mat_EM  = self._estimate_ml_sustain_model_nplus1_clusters(self.__sustainData, ml_sequence_prev_EM, ml_f_prev_EM, ml_genetic_weights_prev_EM) #self.__estimate_ml_sustain_model_nplus1_clusters(self.__data, ml_sequence_prev_EM, ml_f_prev_EM)
                 else:
                     
                     ml_sequence_EM,     \
@@ -191,7 +200,9 @@ class AbstractSustain(ABC):
                     ml_likelihood,      \
                     samples_sequence,   \
                     samples_f,          \
-                    samples_likelihood          = self._estimate_uncertainty_sustain_model(self.__sustainData, seq_init, f_init,genetic_weights_init)           #self.__estimate_uncertainty_sustain_model(self.__data, seq_init, f_init)
+                    samples_likelihood, \
+                    ml_genetic_weights, \
+                    samples_genetic_weights     = self._estimate_uncertainty_sustain_model(self.__sustainData, seq_init, f_init,genetic_weights_init)           #self.__estimate_uncertainty_sustain_model(self.__data, seq_init, f_init)
                 else:
                 
                     ml_sequence,        \
@@ -205,16 +216,57 @@ class AbstractSustain(ABC):
                 ml_f_prev_EM                = ml_f_EM
                 if self.apoe_flag:
                     ml_genetic_weights_prev_EM = ml_genetic_weights_EM
+            
+            if self.apoe_flag:
+                # max like subtype and stage / subject
+                N_samples                       = 1000
+                ml_subtype,             \
+                prob_ml_subtype,        \
+                ml_stage,               \
+                prob_ml_stage,          \
+                prob_subtype,           \
+                prob_stage,             \
+                prob_subtype_stage               = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples, samples_genetic_weights)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
+            
+            else:
 
-            # max like subtype and stage / subject
-            N_samples                       = 1000
-            ml_subtype,             \
-            prob_ml_subtype,        \
-            ml_stage,               \
-            prob_ml_stage,          \
-            prob_subtype,           \
-            prob_stage,             \
-            prob_subtype_stage               = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
+                # max like subtype and stage / subject
+                N_samples                       = 1000
+                ml_subtype,             \
+                prob_ml_subtype,        \
+                ml_stage,               \
+                prob_ml_stage,          \
+                prob_subtype,           \
+                prob_stage,             \
+                prob_subtype_stage               = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
+            
+            # -----------------------------------------------------------------
+            # FINAL SUSTAIN PARAMETER REPORTING
+            # -----------------------------------------------------------------
+            print("\n" + "="*60)
+            print("   FINAL MODEL SUBTYPE COHORT FRACTIONS")
+            print("="*60)
+            for subtype_idx in range(len(ml_f_EM)):
+                print(f" -> Subtype {subtype_idx + 1} Cohort Size: {ml_f_EM[subtype_idx]*100:.2f}% of dataset")
+            print("="*60 + "\n")
+    
+            if self.apoe_flag:
+                print("="*60)
+                print("   SUSTAIN GENETIC PRIOR PROFILE (EM MAX LIKELIHOOD)")
+                print("="*60)
+                
+                # 1. Print the baseline cohort frequencies for direct comparison
+                global_str = ", ".join([f"Cat_{c}: {w:.4f}" for c, w in enumerate(self._global_genetic_frequencies)])
+                print(f" -> COHORT BACKGROUND BASELINE : [{global_str}]")
+                print("-"*60) # Visual separator
+                
+                # 2. Loop through each optimized subtype cluster row cleanly
+                for subtype_idx in range(ml_genetic_weights_EM.shape[0]):
+                    weights_str = ", ".join([f"Cat_{c}: {w:.4f}" for c, w in enumerate(ml_genetic_weights_EM[subtype_idx])])
+                    print(f" -> Subtype {subtype_idx + 1} Profile Prior : [{weights_str}]")
+                    
+                print("="*60 + "\n")
+            
             if not pickle_filepath.exists():
 
                 if not os.path.exists(self.output_folder):
@@ -224,6 +276,8 @@ class AbstractSustain(ABC):
                 save_variables["samples_sequence"]      = samples_sequence
                 save_variables["samples_f"]             = samples_f
                 save_variables["samples_likelihood"]    = samples_likelihood
+                if self.apoe_flag:
+                    save_variables["samples_genetic_weights"] = samples_genetic_weights
 
                 save_variables["ml_subtype"]            = ml_subtype
                 save_variables["prob_ml_subtype"]       = prob_ml_subtype
@@ -237,6 +291,9 @@ class AbstractSustain(ABC):
                 save_variables["ml_sequence_prev_EM"]   = ml_sequence_prev_EM
                 save_variables["ml_f_EM"]               = ml_f_EM
                 save_variables["ml_f_prev_EM"]          = ml_f_prev_EM
+                if self.apoe_flag:
+                    save_variables["ml_genetic_weights_EM"] = ml_genetic_weights_EM
+                    save_variables["ml_genetic_weights_prev_EM"] = ml_genetic_weights_prev_EM
 
                 pickle_file                 = open(pickle_filename_s, 'wb')
                 pickle_output               = pickle.dump(save_variables, pickle_file)
@@ -272,7 +329,8 @@ class AbstractSustain(ABC):
             fig0.tight_layout()
             fig0.savefig(Path(self.output_folder) / f"MCMC_likelihoods.{plot_format}", bbox_inches='tight')
             fig0.show()
-
+        
+        
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
 
 
@@ -555,33 +613,50 @@ class AbstractSustain(ABC):
 
         #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
 
-    def subtype_and_stage_individuals(self, sustainData, samples_sequence, samples_f, N_samples):
+    def subtype_and_stage_individuals(self, sustainData, samples_sequence, samples_f, N_samples, samples_genetic_weights=None):
         # Subtype and stage a set of subjects. Useful for subtyping/staging subjects that were not used to build the model
 
         nSamples                            = sustainData.getNumSamples()  #data_local.shape[0]
         nStages                             = sustainData.getNumStages()    #self.stage_zscore.shape[1]
 
         n_iterations_MCMC                   = samples_sequence.shape[2]
-        select_samples                      = np.round(np.linspace(0, n_iterations_MCMC - 1, N_samples))
+        select_samples                      = np.round(np.linspace(0, n_iterations_MCMC - 1, N_samples)) #np.linspace builds an index array that skips through the timeline in increments of 1000 steps:
         N_S                                 = samples_sequence.shape[0]
         temp_mean_f                         = np.mean(samples_f, axis=1)
-        ix                                  = np.argsort(temp_mean_f)[::-1]
+        ix                                  = np.argsort(temp_mean_f)[::-1] # sorting indexes based on decreasing subtype prevalence
 
         prob_subtype_stage                  = np.zeros((nSamples, nStages + 1, N_S))
         prob_subtype                        = np.zeros((nSamples, N_S))
         prob_stage                          = np.zeros((nSamples, nStages + 1))
-
-        for i in range(N_samples):
+        
+        
+        # this part calculates individual posterior probabilities by avg the results across mcmc samples
+        # but bc of computational constraints its subsamples only a small sample of the whole mcmc array
+        # np.linspace builds an index array that skips through the timeline in increments of 1000 steps:
+        # and then iterate over samples
+        for i in range(N_samples): 
             sample                          = int(select_samples[i])
 
             this_S                          = samples_sequence[ix, :, sample]
             this_f                          = samples_f[ix, sample]
-
-            _,                  \
-            _,                  \
-            total_prob_stage,   \
-            total_prob_subtype, \
-            total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f)
+            
+            if self.apoe_flag:
+                this_genetic_weights        = samples_genetic_weights[ix, :,sample]
+                # in case it throws a shape mismatch for N_S>1
+                # this_genetic_weights  = samples_genetic_weights[:, :, sample][ix, :]
+                
+                _,                  \
+                _,                  \
+                total_prob_stage,   \
+                total_prob_subtype, \
+                total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f, this_genetic_weights)
+            
+            else:
+                _,                  \
+                _,                  \
+                total_prob_stage,   \
+                total_prob_subtype, \
+                total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f)
 
             total_prob_subtype              = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
             total_prob_subtype_norm         = total_prob_subtype        / np.tile(np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
@@ -720,19 +795,31 @@ class AbstractSustain(ABC):
                     this_f_init             = np.array([1.] * N_S) / float(N_S)
                     
                     # initilise genetic weights
-                    this_genetic_weights_init = self._initialise_genetic_weights(N_S= N_S)
-                    
-                    print('There are', self.N_genetic_categories, 'genetic categories')
-                    print(N_S[0][0][0])
+                    if self.apoe_flag:
+                        this_genetic_weights_init = self._initialise_genetic_weights(N_S= N_S)
+                        print('Genetic weights init', this_genetic_weights_init)
                 
  
                     print(' + Finding ML solution from hierarchical initialisation')
-                    this_ml_sequence,       \
-                    this_ml_f,              \
-                    this_ml_likelihood,     \
-                    this_ml_sequence_mat,   \
-                    this_ml_f_mat,          \
-                    this_ml_likelihood_mat  = self._find_ml_mixture(sustainData, this_seq_init, this_f_init, this_genetic_weights_init)
+                    
+                    
+                    if self.apoe_flag:
+                        this_ml_sequence,       \
+                        this_ml_f,              \
+                        this_ml_likelihood,     \
+                        this_ml_sequence_mat,   \
+                        this_ml_f_mat,          \
+                        this_ml_likelihood_mat, \
+                        this_ml_genetic_weights,\
+                        this_ml_genetic_weights_mat = self._find_ml_mixture(sustainData, this_seq_init, this_f_init, this_genetic_weights_init)
+                    
+                    else:
+                        this_ml_sequence,       \
+                        this_ml_f,              \
+                        this_ml_likelihood,     \
+                        this_ml_sequence_mat,   \
+                        this_ml_f_mat,          \
+                        this_ml_likelihood_mat    = self._find_ml_mixture(sustainData, this_seq_init, this_f_init)
 
                     # Choose the most probable SuStaIn model from the different
                     # possible SuStaIn models initialised by splitting each subtype
@@ -745,6 +832,11 @@ class AbstractSustain(ABC):
                         ml_likelihood_mat   = this_ml_likelihood_mat[0]
                         ml_sequence_mat     = this_ml_sequence_mat[:, :, 0]
                         ml_f_mat            = this_ml_f_mat[:, 0]
+                        
+                        if self.apoe_flag:
+                            ml_genetic_weights = this_ml_genetic_weights[:,:,0]
+                            ml_genetic_weights_mat = this_ml_genetic_weights_mat[:,:,0]
+                        
                     print('- ML likelihood is', this_ml_likelihood[0])
                 else:
                     print(f'Cluster {ix_cluster_split + 1} of {N_S - 1} too small for subdivision')
@@ -1020,7 +1112,7 @@ class AbstractSustain(ABC):
             return this_ml_sequence, this_ml_f, this_ml_likelihood
 
     #********************************************
-    def _find_ml_mixture(self, sustainData, seq_init, f_init):
+    def _find_ml_mixture(self, sustainData, seq_init, f_init, genetic_weights_init = None):
         # Fit a mixture of models
         #
         #
@@ -1031,7 +1123,7 @@ class AbstractSustain(ABC):
 
         N_S                                 = seq_init.shape[0]
 
-        partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
+        partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init, genetic_weights_init = genetic_weights_init)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
         pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
@@ -1041,11 +1133,20 @@ class AbstractSustain(ABC):
         ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
         ml_likelihood_mat                   = np.zeros((self.N_startpoints, 1))
+        
+        if self.apoe_flag:
+            ml_genetic_weights_mat          = np.zeros((N_S,self.N_genetic_categories,self.N_startpoints))
+
 
         for i in range(self.N_startpoints):
             ml_sequence_mat[:, :, i]        = pool_output_list[i][0]
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
+            
+            if self.apoe_flag:
+                ml_genetic_weights_mat[:,:,i] = pool_output_list[i][6]
+                
+            
 
         ix                                  = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
         ix                                  = ix[0]
@@ -1053,23 +1154,43 @@ class AbstractSustain(ABC):
         ml_sequence                         = ml_sequence_mat[:, :, ix]
         ml_f                                = ml_f_mat[:, ix]
         ml_likelihood                       = ml_likelihood_mat[ix]
+        
+        if self.apoe_flag:
+            ml_genetic_weights              = ml_genetic_weights_mat[:,:,ix]
 
-        return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
+            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, ml_genetic_weights, ml_genetic_weights_mat
+        else:
+            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_seq):
+    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_seq, genetic_weights_init=None):
         #Convenience sub-function for above
 
         # Get process-appropriate Generator
         rng = np.random.default_rng(seed_seq)
+        
+        if self.apoe_flag:
+            
+            ml_sequence,        \
+            ml_f,               \
+            ml_genetic_weights ,\
+            ml_likelihood,      \
+            samples_sequence,   \
+            samples_f,          \
+            samples_likelihood, \
+            samples_genetic_weights             = self._perform_em(sustainData, seq_init, f_init, rng, genetic_weights_init)
+        
+            return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood, ml_genetic_weights, samples_genetic_weights
+        
+        else:
+            ml_sequence,        \
+            ml_f,               \
+            ml_likelihood,      \
+            samples_sequence,   \
+            samples_f,          \
+            samples_likelihood                  = self._perform_em(sustainData, seq_init, f_init, rng)
+            return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-        ml_sequence,        \
-        ml_f,               \
-        ml_likelihood,      \
-        samples_sequence,   \
-        samples_f,          \
-        samples_likelihood                  = self._perform_em(sustainData, seq_init, f_init, rng)
-
-        return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
+        
     #********************************************
 
     def _perform_em(self, sustainData, current_sequence, current_f, rng, current_genetic_weights=None):
@@ -1141,7 +1262,7 @@ class AbstractSustain(ABC):
             # rng_mock = np.random.default_rng(42)
             # genetic_weights_init = rng_mock.dirichlet(alpha=[1, 1, 1], size=N_S)
             # current_genetic_weights = genetic_weights_init
-        print('Initial genetic weights', current_genetic_weights)
+        #print('Initial genetic weights', current_genetic_weights)
         
         current_likelihood, _, _, _, _      = self._calculate_likelihood(sustainData, current_sequence, current_f, current_genetic_weights)
 
@@ -1173,13 +1294,13 @@ class AbstractSustain(ABC):
                 
                 if np.fabs((candidate_likelihood - current_likelihood) / max(candidate_likelihood, current_likelihood)) < 1e-6:
                     HAS_converged_seq = True
-                    print(f'Biomarker sequence layout converged at iteration {iteration}')
+                    #print(f'Biomarker sequence layout converged at iteration {iteration}')
                 else:
                     if candidate_likelihood > current_likelihood:
                         current_sequence        = candidate_sequence
                         current_f               = candidate_f
                         current_likelihood      = candidate_likelihood
-                        print('Accepting new clinical biomarker order')
+                        #print('Accepting new clinical biomarker order')
             
             
             # optimise genetic parameters
@@ -1188,9 +1309,9 @@ class AbstractSustain(ABC):
                 candidate_genetic_weights, \
                 candidate_genetic_likelihood        = self._optimise_genetic_parameters(sustainData, current_sequence, current_f, current_genetic_weights)
                 
-                print('Candidate genetic weights', candidate_genetic_weights)
-                print('Cand gen lik',candidate_genetic_likelihood )
-                print('Current lik', current_likelihood)
+                #print('Candidate genetic weights', candidate_genetic_weights)
+                #print('Cand gen lik',candidate_genetic_likelihood )
+                #print('Current lik', current_likelihood)
                 # Check localized genetic convergence criterion
                 if np.fabs((candidate_genetic_likelihood - current_likelihood) / max(candidate_genetic_likelihood, current_likelihood)) < 1e-6:
                     HAS_converged_gen = True
@@ -1199,7 +1320,7 @@ class AbstractSustain(ABC):
                     if candidate_genetic_likelihood > current_likelihood:
                         current_likelihood = candidate_genetic_likelihood
                         current_genetic_weights = candidate_genetic_weights
-                        print('Accepting new genetic weights matrix')
+                        #print('Accepting new genetic weights matrix')
                 
                 
             if HAS_converged_seq and HAS_converged_gen :
@@ -1263,6 +1384,8 @@ class AbstractSustain(ABC):
             #print('Genetic weights',genetic_weights.shape, genetic_weights)
             
             # 1. Multiply matrices to get a patient-by-subtype prior: shape (M, N_S)
+            print('APoe dummy',apoe_dummy)
+            print('genetic weights',genetic_weights)
             genetic_prior = apoe_dummy @ genetic_weights.T
             
             # 2. Reshape to (M, 1, N_S) so it stretches perfectly across the (N + 1) stages
@@ -1302,17 +1425,22 @@ class AbstractSustain(ABC):
         if self.apoe_flag:
             
             # Perform a few initial passes where the perturbation sizes of the MCMC uncertainty estimation are tuned
-            seq_sigma_opt, f_sigma_opt          = self._optimise_mcmc_settings(sustainData, seq_init, f_init,genetic_weights_init)
-
+            seq_sigma_opt, f_sigma_opt, genetic_sigma_opt   = self._optimise_mcmc_settings(sustainData, seq_init, f_init,genetic_weights_init)
+            
+            #print('Genetics sigma (Step size) after dyanmic optimisation:',genetic_sigma_opt)
+        
             # Run the full MCMC algorithm to estimate the uncertainty
             ml_sequence,        \
             ml_f,               \
             ml_likelihood,      \
             samples_sequence,   \
             samples_f,          \
-            samples_likelihood                  = self._perform_mcmc(sustainData, seq_init, f_init, self.N_iterations_MCMC, seq_sigma_opt, f_sigma_opt,genetic_weights_init)
+            samples_likelihood, \
+            ml_genetic_weights, \
+            samples_genetic_weights          = self._perform_mcmc(sustainData, seq_init, f_init, self.N_iterations_MCMC, seq_sigma_opt, f_sigma_opt,genetic_weights_init,genetic_sigma_opt )
 
-            return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
+            return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood, ml_genetic_weights, samples_genetic_weights
+
 
         
         # Perform a few initial passes where the perturbation sizes of the MCMC uncertainty estimation are tuned
@@ -1327,7 +1455,7 @@ class AbstractSustain(ABC):
         samples_likelihood                  = self._perform_mcmc(sustainData, seq_init, f_init, self.N_iterations_MCMC, seq_sigma_opt, f_sigma_opt)
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
-
+    
     def _optimise_mcmc_settings(self, sustainData, seq_init, f_init, genetic_weights_init=None):
 
         # Optimise the perturbation size for the MCMC algorithm
@@ -1337,18 +1465,22 @@ class AbstractSustain(ABC):
 
         seq_sigma_currentpass               = 1
         f_sigma_currentpass                 = 0.01  # magic number
+        if self.apoe_flag:
+            # step size for genetic_Weights initialisation
+            genetics_sigma_currentpass         = 0.01
 
         N_S                                 = seq_init.shape[0]
 
         for i in range(n_passes_optimisation):
             if self.apoe_flag:
-                _, _, _, samples_sequence_currentpass, samples_f_currentpass, _ = self._perform_mcmc(   sustainData,
-                                                                                                         seq_init,
-                                                                                                         f_init,
-                                                                                                         n_iterations_MCMC_optimisation,
-                                                                                                         seq_sigma_currentpass,
-                                                                                                         f_sigma_currentpass,
-                                                                                                         genetic_weights_init)
+                _, _, _, samples_sequence_currentpass, samples_f_currentpass, _,_, samples_genetic_currentpass = self._perform_mcmc(   sustainData,
+                                                                                                                                     seq_init,
+                                                                                                                                     f_init,
+                                                                                                                                     n_iterations_MCMC_optimisation,
+                                                                                                                                     seq_sigma_currentpass,
+                                                                                                                                     f_sigma_currentpass,
+                                                                                                                                     genetic_weights_init,
+                                                                                                                                     genetics_sigma_currentpass)
             else:
                 
                 _, _, _, samples_sequence_currentpass, samples_f_currentpass, _ = self._perform_mcmc(   sustainData,
@@ -1370,11 +1502,19 @@ class AbstractSustain(ABC):
             seq_sigma_currentpass[seq_sigma_currentpass < 0.01] = 0.01  # magic number
 
             f_sigma_currentpass             = np.std(samples_f_currentpass, axis=1, ddof=1)         # np.std is different to Matlab std, which normalises to N-1 by default
+            
+            if self.apoe_flag:
+                genetics_sigma_currentpass = np.std(samples_genetic_currentpass, axis = 2, ddof=1)# # on what axis2 and ddof
 
         seq_sigma_opt                       = seq_sigma_currentpass
         f_sigma_opt                         = f_sigma_currentpass
+        
+        if self.apoe_flag:
+            genetics_sigma_opt              = genetics_sigma_currentpass
 
-        return seq_sigma_opt, f_sigma_opt
+            return seq_sigma_opt, f_sigma_opt, genetics_sigma_opt
+        else:
+            return seq_sigma_opt, f_sigma_opt
 
     def _evaluate_likelihood_setofsamples(self, sustainData, samples_sequence, samples_f):
     
@@ -1521,7 +1661,11 @@ class ZScoreSustainData(AbstractSustainData):
 
     def reindex(self, index):
         # print('Reindexing works for apoe:',self.apoe[index,:])
-        return ZScoreSustainData(self.data[index,], self.__numStages, self.apoe[index,:])
+        apoe_flag = getattr(self, 'apoe_flag', False)
+        if apoe_flag: 
+            return ZScoreSustainData(self.data[index,], self.__numStages, self.apoe[index,:])
+        else:
+            return ZScoreSustainData(self.data[index,], self.__numStages)
 
 #*******************************************
 #An implementation of the AbstractSustain class with multiple events for each biomarker based on deviations from normality, measured in z-scores.
@@ -1949,7 +2093,7 @@ class ZscoreSustain_APOE4(AbstractSustain):
         return genetic_weights_opt, genetic_likelihood_opt
         
 
-    def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma, genetic_weights_init=None):
+    def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma, genetic_weights_init=None, genetics_sigma=None):
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
 
         N                                   = self.stage_zscore.shape[1]
@@ -1961,6 +2105,11 @@ class ZscoreSustain_APOE4(AbstractSustain):
         samples_sequence                    = np.zeros((N_S, N, n_iterations))
         samples_f                           = np.zeros((N_S, n_iterations))
         samples_likelihood                  = np.zeros((n_iterations, 1))
+        
+        if self.apoe_flag:    
+            samples_genetic_weights             = np.zeros((N_S, self.N_genetic_categories,n_iterations))
+            samples_genetic_weights[:,:,0]      = genetic_weights_init
+        
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
@@ -2027,32 +2176,50 @@ class ZscoreSustain_APOE4(AbstractSustain):
                 new_f                       = samples_f[:, i - 1] + f_sigma * self.global_rng.standard_normal()
                 new_f                       = (np.fabs(new_f) / np.sum(np.fabs(new_f)))
                 samples_f[:, i]             = new_f
-
+                
+                # check if we need to change how the perturbations are made and are they still normalised
+                if self.apoe_flag:
+                    new_weights                           = samples_genetic_weights[:,:,i-1] + genetics_sigma * self.global_rng.standard_normal(size=(N_S, self.N_genetic_categories))
+                    new_weights                           = (np.fabs(new_weights) / np.sum(np.fabs(new_weights), axis=1, keepdims=True)) # on what axis
+                    samples_genetic_weights[:, :, i]       = new_weights 
+                    
             S                               = samples_sequence[:, :, i]
             f                               = samples_f[:, i]
             if self.apoe_flag:
-                likelihood_sample, _, _, _, _   = self._calculate_likelihood(sustainData, S, f,genetic_weights_init)
+                genetic_weights             = samples_genetic_weights[:, :, i]
+                #print('Genetic weights of index i', genetic_weights)
+            
+            if self.apoe_flag:
+                likelihood_sample, _, _, _, _   = self._calculate_likelihood(sustainData, S, f,genetic_weights)
             else:
                 likelihood_sample, _, _, _, _   = self._calculate_likelihood(sustainData, S, f)
             samples_likelihood[i]           = likelihood_sample
-
+            
+            # this is the block updates (metropolis hastings)
+            # in case it doesnt show good acceptance rates, try splitting it: Gibbs withn Hastings
             if i > 0:
                 ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
                 if ratio < self.global_rng.random():
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
+                    
+                    if self.apoe_flag:
+                        samples_genetic_weights[:, :, i] = samples_genetic_weights[:, :, i-1]
 
         perm_index                          = np.where(samples_likelihood == max(samples_likelihood))
         perm_index                          = perm_index[0]
         ml_likelihood                       = max(samples_likelihood)
         ml_sequence                         = samples_sequence[:, :, perm_index]
         ml_f                                = samples_f[:, perm_index]
+        if self.apoe_flag:
+            ml_genetic_weights              = samples_genetic_weights[:,:, perm_index]
+            return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood, ml_genetic_weights, samples_genetic_weights
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
     def _plot_sustain_model(self, *args, **kwargs):
-        return ZscoreSustain_APOE4(data, Z_vals, Z_max, biomarker_labels, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, use_parallel_startpoints).plot_positional_var(*args, Z_vals=self.Z_vals, **kwargs)
+        return ZscoreSustain_APOE4.plot_positional_var(*args, Z_vals=self.Z_vals, **kwargs)
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
