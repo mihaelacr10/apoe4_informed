@@ -1192,11 +1192,49 @@ class AbstractSustain(ABC):
 
         
     #********************************************
-
+    def _run_anatomical_burnin(self, sustainData, current_sequence, current_f, rng, burn_in_iters=10):
+        """
+        Anatomical Burn-In Pre-Routine:
+        Optimizes sequence and cohort fractions for a fixed number of iterations
+        using a completely flat, non-informative genetic prior matrix.
+        Returns the stabilized sequence layout and adjusted cohort fractions.
+        """
+        N_S = current_sequence.shape[0]
+        
+        # 1. Initialize temporary flat uniform weights to blind the likelihood engine
+        uniform_weights = np.ones((N_S, self.N_genetic_categories)) / self.N_genetic_categories
+        
+        S_stable = current_sequence.copy()
+        f_stable = current_f.copy()
+        
+        # 2. Run the isolated burn-in loop
+        for _ in range(burn_in_iters):
+            S_stable, f_stable, _ = self._optimise_parameters(
+                sustainData, S_stable, f_stable, rng, uniform_weights
+            )
+            
+        print(f"--- Upfront Anatomical Burn-In Complete ({burn_in_iters} iterations) ---")
+        return S_stable, f_stable
+    
     def _perform_em(self, sustainData, current_sequence, current_f, rng, current_genetic_weights=None):
+        # allow method to be updated from input
+        method = 'combined'
+        #method = 'alternating'
+        use_burn_in_phase = True
         
         if self.apoe_flag:
-            return self._perform_em_genetics(sustainData, current_sequence, current_f, rng, current_genetic_weights)
+            if use_burn_in_phase:
+                # Re-assign the starting parameters to your stabilized spatial layouts
+                current_sequence, current_f = self._run_anatomical_burnin(
+                    sustainData, current_sequence, current_f, rng, burn_in_iters=0
+                )
+                
+                if method == 'alternating':
+                    print('Using',method,'method' )
+                    return self._perform_em_alternating(sustainData, current_sequence, current_f, rng, current_genetic_weights)
+                else:
+                    print('Using',method,'method')
+                    return self._perform_em_combined(sustainData, current_sequence, current_f, rng, current_genetic_weights)
 
         # Perform an E-M procedure to estimate parameters of SuStaIn model
         MaxIter                             = 100
@@ -1247,22 +1285,15 @@ class AbstractSustain(ABC):
         ml_f                                = current_f
         ml_likelihood                       = current_likelihood
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
+ 
     
-    
-    def _perform_em_genetics(self, sustainData, current_sequence, current_f, rng, current_genetic_weights): # do i need to pass current_genetic_weights as input var too?
+    def _perform_em_alternating(self, sustainData, current_sequence, current_f, rng, current_genetic_weights): # do i need to pass current_genetic_weights as input var too?
 
         # Perform an E-M procedure to estimate parameters of SuStaIn model
         MaxIter                             = 100
 
         N                                   = sustainData.getNumStages()    #self.stage_zscore.shape[1]
         N_S                                 = current_sequence.shape[0]
-        
-        # initialise genetic weights - might make it a separate function for sth more complex than random
-        #if current_genetic_weights is None: 
-            # rng_mock = np.random.default_rng(42)
-            # genetic_weights_init = rng_mock.dirichlet(alpha=[1, 1, 1], size=N_S)
-            # current_genetic_weights = genetic_weights_init
-        #print('Initial genetic weights', current_genetic_weights)
         
         current_likelihood, _, _, _, _      = self._calculate_likelihood(sustainData, current_sequence, current_f, current_genetic_weights)
 
@@ -1342,8 +1373,94 @@ class AbstractSustain(ABC):
         ml_genetic_weights                  = current_genetic_weights
         ml_likelihood                       = current_likelihood
         return ml_sequence, ml_f, ml_genetic_weights ,ml_likelihood, samples_sequence, samples_f, samples_genetics, samples_likelihood
+    
+    
+    
+    
+    # 1 step perform em 
+    # IF combined method works better, rename it as perform_em and use it everywhere!
+    def _perform_em_combined(self, sustainData, current_sequence, current_f, rng, current_genetic_weights): # do i need to pass current_genetic_weights as input var too?
+        ''' In this function I will allow both original params (sequence,f) and new params (genetic weights) to 
+        optimise in the same EM sequence
+        
+        '''
+      
+    
+        # Perform an E-M procedure to estimate parameters of SuStaIn model
+        MaxIter                             = 100
 
+        N                                   = sustainData.getNumStages()    #self.stage_zscore.shape[1]
+        N_S                                 = current_sequence.shape[0]
+        
+        
+        if self.apoe_flag:
+            current_likelihood, _, _, _, _      = self._calculate_likelihood(sustainData, current_sequence, current_f, current_genetic_weights)
+        else:
+            current_likelihood, _, _, _, _      = self._calculate_likelihood(sustainData, current_sequence, current_f)
 
+        terminate                           = 0
+        iteration                           = 0
+        samples_sequence                    = np.nan * np.ones((MaxIter, N, N_S))
+        samples_f                           = np.nan * np.ones((MaxIter, N_S))
+        samples_likelihood                  = np.nan * np.ones((MaxIter, 1))
+        if self.apoe_flag:   
+            samples_genetics                    = np.nan * np.ones((MaxIter, N_S, self.N_genetic_categories))
+
+        samples_sequence[0, :, :]           = current_sequence.reshape(current_sequence.shape[1], current_sequence.shape[0])
+        current_f                           = np.array(current_f).reshape(len(current_f))
+        samples_f[0, :]                     = current_f
+        samples_likelihood[0]               = current_likelihood
+        if self.apoe_flag:
+            samples_genetics[0,:,:]             = current_genetic_weights
+        
+            
+        while terminate == 0:
+            
+            # optimising sequence and f
+            if self.apoe_flag:
+                candidate_sequence,     \
+                candidate_f,            \
+                candidate_likelihood,   \
+                candidate_genetic_weights   = self._optimise_parameters_combined(sustainData, current_sequence, current_f, rng, current_genetic_weights)
+            
+            else:
+                
+                candidate_sequence,     \
+                candidate_f,            \
+                candidate_likelihood            = self._optimise_parameters(sustainData, current_sequence, current_f, rng)
+
+            HAS_converged                   = np.fabs((candidate_likelihood - current_likelihood) / max(candidate_likelihood, current_likelihood)) < 1e-6
+            if HAS_converged:
+                print('EM converged in', iteration + 1, 'iterations')
+                terminate                   = 1
+            else:
+                if candidate_likelihood > current_likelihood:
+                    current_sequence        = candidate_sequence
+                    current_f               = candidate_f
+                    current_likelihood      = candidate_likelihood
+                    if self.apoe_flag:
+                        current_genetic_weights = candidate_genetic_weights
+
+            samples_sequence[iteration, :, :] = current_sequence.T.reshape(current_sequence.T.shape[0], N_S)
+            samples_f[iteration, :]           = current_f
+            if self.apoe_flag:   
+                samples_genetics[iteration, :, :] = current_genetic_weights  # <-- Log weights snapshot here
+            samples_likelihood[iteration]     = current_likelihood
+
+            if iteration == (MaxIter - 1):
+                terminate                   = 1
+            iteration                       = iteration + 1
+
+        ml_sequence                         = current_sequence
+        ml_f                                = current_f
+        ml_likelihood                       = current_likelihood
+        
+        if self.apoe_flag:  
+            ml_genetic_weights                  = current_genetic_weights
+            return ml_sequence, ml_f, ml_genetic_weights ,ml_likelihood, samples_sequence, samples_f, samples_genetics, samples_likelihood
+        else:
+            return ml_sequence, ml_f,ml_likelihood, samples_sequence, samples_f, samples_likelihood
+        
 
     def _calculate_likelihood(self, sustainData, S, f, genetic_weights=None):
         # Computes the likelihood of a mixture of models
@@ -1384,8 +1501,8 @@ class AbstractSustain(ABC):
             #print('Genetic weights',genetic_weights.shape, genetic_weights)
             
             # 1. Multiply matrices to get a patient-by-subtype prior: shape (M, N_S)
-            print('APoe dummy',apoe_dummy)
-            print('genetic weights',genetic_weights)
+            #print('APoe dummy',apoe_dummy)
+            #print('genetic weights',genetic_weights)
             genetic_prior = apoe_dummy @ genetic_weights.T
             
             # 2. Reshape to (M, 1, N_S) so it stretches perfectly across the (N + 1) stages
@@ -1661,11 +1778,12 @@ class ZScoreSustainData(AbstractSustainData):
 
     def reindex(self, index):
         # print('Reindexing works for apoe:',self.apoe[index,:])
-        apoe_flag = getattr(self, 'apoe_flag', False)
-        if apoe_flag: 
-            return ZScoreSustainData(self.data[index,], self.__numStages, self.apoe[index,:])
-        else:
+        
+        if self.apoe is None: 
             return ZScoreSustainData(self.data[index,], self.__numStages)
+            
+        else:
+            return ZScoreSustainData(self.data[index,], self.__numStages, self.apoe[index,:])
 
 #*******************************************
 #An implementation of the AbstractSustain class with multiple events for each biomarker based on deviations from normality, measured in z-scores.
@@ -1919,9 +2037,24 @@ class ZscoreSustain_APOE4(AbstractSustain):
         p_perm_k = np.exp(p_perm_k)
 
         return p_perm_k
-
+    
 
     def _optimise_parameters(self, sustainData, S_init, f_init, rng, genetic_weights= None):
+        '''
+        Core Behavior:
+          - Optimizes clinical biomarker Sequences (S) and Cohort Fractions (f).
+          - Keeps Categorical Genetic Weights (W) COMPLETELY FIXED.
+        
+        Used By:
+          - Baseline SuStaIn (apoe_flag = False).
+          - The upfront "Anatomical Burn-In" pre-routine phase.
+          - Step 1 of the 'alternating' EM optimization method.
+        
+        Mathematical Framework:
+          Standard piece-wise linear z-score likelihood maximization. If genetic 
+          weights are passed in, they act as static background scaling constants.
+          '''
+          
         # Optimise the parameters of the SuStaIn model
 
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
@@ -1933,9 +2066,6 @@ class ZscoreSustain_APOE4(AbstractSustain):
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
         p_perm_k                            = np.zeros((M, N + 1, N_S))
-        
-        
-       
         
         # --- GENETIC PRIOR INITIALIZATION ---
        
@@ -2057,8 +2187,17 @@ class ZscoreSustain_APOE4(AbstractSustain):
     
     def _optimise_genetic_parameters(self, sustainData, S, f, genetic_weights_init):
         """
-        Self-contained genetic optimizer. Computes its own likelihood tensors
-        to keep the rest of the EM script clean and easy to read.
+        Core Behavior:
+          - Optimizes Categorical Genetic Weights (W) ONLY.
+          - Keeps Biomarker Sequences (S) and Cohort Fractions (f) COMPLETELY FIXED.
+        
+        Used By:
+          - Step 2 of the old 'alternating' EM optimization method.
+        Mathematical Framework:
+          Computes a localized E-step to get patient cluster responsibilities, 
+          then executes a closed-form Lagrangian optimization step to maximize 
+          the categorical matrix weights under the row-sum constraint (sum(W) = 1).
+        
         """
         apoe_dummy = sustainData.apoe
         N_S = S.shape[0]
@@ -2091,6 +2230,161 @@ class ZscoreSustain_APOE4(AbstractSustain):
         genetic_likelihood_opt = np.sum(np.log(total_prob_subj + 1e-250))
         
         return genetic_weights_opt, genetic_likelihood_opt
+    
+    def _optimise_parameters_combined(self, sustainData, S_init, f_init, rng, genetic_weights_init):
+        """
+        Core Behavior:
+          - Optimizes Sequences (S), Fractions (f), AND Genetic Weights (W)
+            SIMULTANEOUSLY within a single execution block.
+        
+        Used By:
+          - The true 1-Step Simultaneous EM method ('combined').
+        
+        Mathematical Framework:
+          1. E-Step: Freezes a single, unified patient responsibility mass (gamma)
+                     using incoming sequence and genetic inputs.
+          2. M-Step: Instantly updates BOTH fractions (f) and genetic weights (W) 
+                     analytically from that same frozen gamma snapshot.
+          3. Shuffler: Runs the greedy biomarker event-swapping loops immediately 
+                       after to align the sequence to the new parameters.
+        
+        """
+        M     = sustainData.getNumSamples()
+        N_S   = S_init.shape[0]
+        N     = self.stage_zscore.shape[1]
+
+        S_opt = S_init.copy()
+        
+        # ---------------------------------------------------------------------
+        # 1. INITIAL EXPECTATION STEP (Calculate Joint Likelihood & Gamma)
+        # ---------------------------------------------------------------------
+        f_opt     = np.array(f_init).reshape(N_S, 1, 1)
+        f_val_mat = np.tile(f_opt, (1, N + 1, M))
+        f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
+        p_perm_k  = np.zeros((M, N + 1, N_S))
+
+        for s in range(N_S):
+            p_perm_k[:, :, s] = self._calculate_likelihood_stage(sustainData, S_opt[s])
+
+        # Apply categorical genetic prior tensor
+        apoe_dummy        = sustainData.apoe
+        genetic_prior     = (apoe_dummy @ genetic_weights_init.T)[:, np.newaxis, :]
+        p_perm_k_weighted = p_perm_k * f_val_mat * genetic_prior
+        
+        # This is your frozen E-Step responsibility matrix snapshot
+        p_perm_k_norm     = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
+        gamma             = np.sum(p_perm_k_norm, axis=1) # Shape: (M, N_S)
+
+        # ---------------------------------------------------------------------
+        # 2. THE SIMULTANEOUS M-STEP (Analytical Updates for f and W)
+        # ---------------------------------------------------------------------
+        # Update cohort fractions (f) cleanly from gamma mass
+        f_opt     = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+        f_val_mat = np.tile(f_opt, (1, N + 1, M))
+        f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
+        
+        # Update genetic weights (W) analytical matrix using the EXACT same gamma mass snapshot
+        weights_numerator   = gamma.T @ apoe_dummy                                    
+        weights_denominator = np.sum(gamma, axis=0, keepdims=True).T                
+        genetic_weights_opt = weights_numerator / (weights_denominator + 1e-12)
+        
+        # Numerical safeguard to prevent downstream log-likelihood crashes
+        genetic_weights_opt = np.clip(genetic_weights_opt, 1e-5, 1.0)
+        genetic_weights_opt /= np.sum(genetic_weights_opt, axis=1, keepdims=True)
+        
+        # Refresh the active 3D genetic prior using optimized weights
+        genetic_prior = (apoe_dummy @ genetic_weights_opt.T)[:, np.newaxis, :]
+
+        # ---------------------------------------------------------------------
+        # 3. COMBINATORIAL SEQUENCE SHUFFLER STEP (Greedy Search)
+        # ---------------------------------------------------------------------
+        order_seq = rng.permutation(N_S)
+        for s in order_seq:
+            order_bio = rng.permutation(N)
+            for i in order_bio:
+                current_sequence                               = S_opt[s]
+                current_location                               = np.array([0] * len(current_sequence))
+                current_location[current_sequence.astype(int)] = np.arange(len(current_sequence))
+
+                selected_event   = i
+                move_event_from  = current_location[selected_event]
+
+                this_stage_zscore           = self.stage_zscore[0, selected_event]
+                selected_biomarker          = self.stage_biomarker_index[0, selected_event]
+                possible_zscores_biomarker  = self.stage_zscore[self.stage_biomarker_index == selected_biomarker]
+
+                min_filter = possible_zscores_biomarker < this_stage_zscore
+                max_filter = possible_zscores_biomarker > this_stage_zscore
+                events     = np.array(range(N))
+                
+                if np.any(min_filter):
+                    min_zscore_bound          = max(possible_zscores_biomarker[min_filter])
+                    min_zscore_bound_event    = events[((self.stage_zscore[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    move_event_to_lower_bound = current_location[min_zscore_bound_event] + 1
+                else:
+                    move_event_to_lower_bound = 0
+                    
+                if np.any(max_filter):
+                    max_zscore_bound          = min(possible_zscores_biomarker[max_filter])
+                    max_zscore_bound_event    = events[((self.stage_zscore[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    move_event_to_upper_bound = current_location[max_zscore_bound_event]
+                else:
+                    move_event_to_upper_bound = N
+                    
+                if move_event_to_lower_bound == move_event_to_upper_bound:
+                    possible_positions = np.array([0])
+                else:
+                    possible_positions = np.arange(move_event_to_lower_bound, move_event_to_upper_bound)
+                    
+                possible_sequences  = np.zeros((len(possible_positions), N))
+                possible_likelihood = np.zeros((len(possible_positions), 1))
+                possible_p_perm_k   = np.zeros((M, N + 1, len(possible_positions)))
+                
+                for index in range(len(possible_positions)):
+                    current_sequence = S_opt[s]
+                    move_event_to    = possible_positions[index]
+
+                    current_sequence = np.delete(current_sequence, move_event_from, 0)
+                    new_sequence     = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    possible_sequences[index, :] = new_sequence
+
+                    possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
+
+                    p_perm_k[:, :, s] = possible_p_perm_k[:, :, index]
+                    
+                    # Compute inner loop likelihood with the updated f and W parameters
+                    total_prob_stage           = np.sum(p_perm_k * f_val_mat * genetic_prior, 2)
+                    total_prob_subj            = np.sum(total_prob_stage, 1)
+                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
+
+                possible_likelihood = possible_likelihood.reshape(possible_likelihood.shape[0])
+                max_likelihood      = max(possible_likelihood)
+                this_S              = possible_sequences[possible_likelihood == max_likelihood, :]
+                this_S              = this_S[0, :]
+                S_opt[s]            = this_S
+                this_p_perm_k       = possible_p_perm_k[:, :, possible_likelihood == max_likelihood]
+                p_perm_k[:, :, s]   = this_p_perm_k[:, :, 0]
+
+            S_opt[s] = this_S
+
+        # ---------------------------------------------------------------------
+        # 4. FINAL ALIGNMENT M-STEP (Re-align f one last time to the shuffled S)
+        # ---------------------------------------------------------------------
+        p_perm_k_weighted = p_perm_k * f_val_mat * genetic_prior
+        p_perm_k_norm     = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
+
+        f_opt = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+        f_val_mat = np.tile(f_opt, (1, N + 1, M))
+        f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt = f_opt.reshape(N_S)
+        
+        # I dont know if i should update genetic weights one last time here or not
+
+        total_prob_stage = np.sum(p_perm_k * f_val_mat * genetic_prior, 2)
+        total_prob_subj  = np.sum(total_prob_stage, 1)
+        likelihood_opt   = np.sum(np.log(total_prob_subj + 1e-250))
+
+        return S_opt, f_opt, likelihood_opt, genetic_weights_opt
         
 
     def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma, genetic_weights_init=None, genetics_sigma=None):
@@ -2588,10 +2882,4 @@ class ZscoreSustain_APOE4(AbstractSustain):
         data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
 
         return data, data_denoised, stage_value
-        total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
-        total_prob_subj                     = np.sum(total_prob_stage, 1)
-
-        likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
-
-        return S_opt, f_opt, likelihood_opt
-
+    
