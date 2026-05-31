@@ -153,6 +153,72 @@ def genetics_simulation(
 
     return df, Z_vals, Z_max, gt_ordering, W_true
 
+def new_simulation_function(point = False):
+    
+    N                       = 5         # number of biomarkers
+    M                       = 500       # number of observations ( e.g. subjects )
+    M_control               = 100       # number of these that are control subjects
+    N_S_gt                  = 2         # number of ground truth subtypes
+    
+    SuStaInLabels           = []
+    for i in range(N):
+            SuStaInLabels.append( 'Biomarker '+str(i)) # labels of biomarkers for plotting
+            
+    Z_vals                  = np.array([[1,2,3]]*N)     # Z-scores for each biomarker
+    Z_max                   = np.array([5]*N)           # maximum z-score
+       
+    # ground truth proportion of individuals belonging to each subtype    
+    gt_f                    = [1+0.5*x for x in range(N_S_gt)]
+    gt_f                    = [x/sum(gt_f) for x in gt_f][::-1]
+    
+    # ground truth sequence for each subtype
+    gt_sequence             = generate_random_Zscore_sustain_model(Z_vals,
+                                                            N_S_gt)
+    
+    # simulate subtypes and stages for individuals, including a control population at stage 0
+    N_k                     = np.sum(Z_vals>0)+1
+    gt_subtypes             = np.random.choice(range(N_S_gt), M, replace=True, p=gt_f)
+    gt_stages_control       = np.zeros((M_control,1))
+    gt_stages               = np.concatenate((gt_stages_control,
+                                             np.ceil(np.random.rand(M-M_control,1)*N_k)),
+                                            axis=0)
+    
+    # generate simulated data
+    if point:
+        data, gt_data_denoised, gt_stage_value = generate_data_Zscore_sustain_point(gt_subtypes,
+                                                                   gt_stages,
+                                                                   gt_sequence,
+                                                                   Z_vals,
+                                                                   Z_max)
+    else:
+        data, gt_data_denoised, gt_stage_value = generate_data_Zscore_sustain(gt_subtypes,
+                                                                   gt_stages,
+                                                                   gt_sequence,
+                                                                   Z_vals,
+                                                                   Z_max)
+    return data, gt_data_denoised, gt_stage_value, gt_stages, gt_subtypes, gt_sequence
+
+data, gt_data_denoised, gt_stage_value, gt_stages, gt_subtypes, gt_sequence = new_simulation_function(point=False)
+df = pd.DataFrame(data)
+df['gt_subtypes'] = gt_subtypes
+df['gt_stages'] = gt_stages
+print('Gt sequence', gt_sequence)
+
+import matplotlib.pyplot as plt
+plt.hist(gt_stages)
+plt.title('Stages distribution')
+
+
+data1, gt_data_denoised1, gt_stage_valu1, gt_stages1, gt_subtypes1, gt_sequence1 = new_simulation_function(point=True)
+df1 = pd.DataFrame(data1)
+df1['gt_subtypes'] = gt_subtypes1
+df1['gt_stages'] = gt_stages1
+print('Gt sequence', gt_sequence1)
+
+import matplotlib.pyplot as plt
+plt.hist(gt_stages)
+plt.title('Stages distribution')
+
 
 # Example of how to simulate genetics 
 

@@ -371,6 +371,10 @@ class AbstractSustain(ABC):
 
             ml_sequence_prev_EM             = []
             ml_f_prev_EM                    = []
+            
+            if self.apoe_flag:
+                ml_genetic_weights_prev_EM = []
+            
 
             for s in range(self.N_S_max):
 
@@ -389,50 +393,104 @@ class AbstractSustain(ABC):
                     ml_sequence_prev_EM     = loaded_variables["ml_sequence_prev_EM"]
                     ml_f_EM                 = loaded_variables["ml_f_EM"]
                     ml_f_prev_EM            = loaded_variables["ml_f_prev_EM"]
+                    
+                    if self.apoe_flag:
+                        ml_genetic_weights_EM   = loaded_variables["ml_genetic_weights_EM"]
+                        ml_genetic_weights_prev_EM = loaded_variables["ml_genetic_weights_prev_EM"]
+                    
 
                     samples_likelihood      = loaded_variables["samples_likelihood"]
                     samples_sequence        = loaded_variables["samples_sequence"]
                     samples_f               = loaded_variables["samples_f"]
+                    if self.apoe_flag:
+                        samples_genetic_weights = loaded_variables["samples_genetic_weights"]
+                        
 
                     mean_likelihood_subj_test = loaded_variables["mean_likelihood_subj_test"]
                     pickle_file.close()
-
-                    samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
+                    
+                    if self.apoe_flag:
+                        samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
+                    else:
+                        samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f, samples_genetic_weights)
 
                 else:
-                    ml_sequence_EM,         \
-                    ml_f_EM,                \
-                    ml_likelihood_EM,       \
-                    ml_sequence_mat_EM,     \
-                    ml_f_mat_EM,            \
-                    ml_likelihood_mat_EM    = self._estimate_ml_sustain_model_nplus1_clusters(sustainData_train, ml_sequence_prev_EM, ml_f_prev_EM)
+                    
+                    if self.apoe_flag:
+                        ml_sequence_EM,         \
+                        ml_f_EM,                \
+                        ml_likelihood_EM,       \
+                        ml_sequence_mat_EM,     \
+                        ml_f_mat_EM,            \
+                        ml_likelihood_mat_EM,   \
+                        ml_genetic_weights_EM,  \
+                        ml_genetic_weights_mat_EM  = self._estimate_ml_sustain_model_nplus1_clusters(sustainData_train, ml_sequence_prev_EM, ml_f_prev_EM, ml_genetic_weights_prev_EM)
+                    else:
+                        
+                        ml_sequence_EM,         \
+                        ml_f_EM,                \
+                        ml_likelihood_EM,       \
+                        ml_sequence_mat_EM,     \
+                        ml_f_mat_EM,            \
+                        ml_likelihood_mat_EM    = self._estimate_ml_sustain_model_nplus1_clusters(sustainData_train, ml_sequence_prev_EM, ml_f_prev_EM)
 
                     seq_init                    = ml_sequence_EM
                     f_init                      = ml_f_EM
-
-                    ml_sequence,            \
-                    ml_f,                   \
-                    ml_likelihood,          \
-                    samples_sequence,       \
-                    samples_f,              \
-                    samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_train, seq_init, f_init)
-
-                    samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
+                    
+                    if self.apoe_flag:
+                        genetic_weights_init    = ml_genetic_weights_EM
+                        
+                    
+                    
+                    if self.apoe_flag:
+                        
+                        ml_sequence,        \
+                        ml_f,               \
+                        ml_likelihood,      \
+                        samples_sequence,   \
+                        samples_f,          \
+                        samples_likelihood, \
+                        ml_genetic_weights, \
+                        samples_genetic_weights     = self._estimate_uncertainty_sustain_model(self.__sustainData, seq_init, f_init,genetic_weights_init) 
+                        
+                    else:
+                    
+                        ml_sequence,            \
+                        ml_f,                   \
+                        ml_likelihood,          \
+                        samples_sequence,       \
+                        samples_f,              \
+                        samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_train, seq_init, f_init)
+                    
+                    if self.apoe_flag:
+                        samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f, samples_genetic_weights)
+                    else:  
+                        samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
 
                     mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
 
                     ml_sequence_prev_EM         = ml_sequence_EM
                     ml_f_prev_EM                = ml_f_EM
+                    
+                    if self.apoe_flag:
+                        ml_genetic_weights_prev_EM = ml_genetic_weights_EM
 
                     save_variables                                      = {}
                     save_variables["ml_sequence_EM"]                    = ml_sequence_EM
                     save_variables["ml_sequence_prev_EM"]               = ml_sequence_prev_EM
                     save_variables["ml_f_EM"]                           = ml_f_EM
                     save_variables["ml_f_prev_EM"]                      = ml_f_prev_EM
+                    
+                    if self.apoe_flag:
+                        save_variables["ml_genetic_weights_EM"]         = ml_genetic_weights_EM
+                        save_variables["ml_genetic_weights_prev_EM"]    = ml_genetic_weights_prev_EM
+                        
 
                     save_variables["samples_sequence"]                  = samples_sequence
                     save_variables["samples_f"]                         = samples_f
                     save_variables["samples_likelihood"]                = samples_likelihood
+                    if self.apoe_flag:
+                        save_variables["samples_genetic_weights"]        = samples_genetic_weights
 
                     save_variables["mean_likelihood_subj_test"]         = mean_likelihood_subj_test
 
@@ -487,7 +545,133 @@ class AbstractSustain(ABC):
 
         return CVIC, loglike_matrix
 
+    
+    def combine_cross_validated_sequences_1(self, N_subtypes, N_folds, plot_format="png", **kwargs):
+        '''dont know if i need this function or the original one is fine
+        it doesnt seem to need the genetic weights; it just combines seq across folds'''
+        
+        # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
+        # so that you get more realistic estimates of variance within event positions within subtypes
 
+        pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
+
+        #*********** load ML sequence for full model for N_subtypes
+        pickle_filename_s                   = os.path.join(pickle_dir, self.dataset_name + '_subtype' + str(N_subtypes-1) + '.pickle')        
+        pickle_filepath                     = Path(pickle_filename_s)
+
+        assert pickle_filepath.exists(), "Failed to find pickle file for full model with " + str(N_subtypes) + " subtypes."
+
+        pickle_file                         = open(pickle_filename_s, 'rb')
+        loaded_variables_full               = pickle.load(pickle_file)
+
+        ml_sequence_EM_full                 = loaded_variables_full["ml_sequence_EM"]
+        ml_f_EM_full                        = loaded_variables_full["ml_f_EM"]
+        
+        if self.apoe_flag:
+            ml_genetic_weights_EM_full      = loaded_variables_full["ml_genetic_weights_EM"]
+
+        pickle_file.close()
+
+        for i in range(N_folds):
+            # load the MCMC sequences for this fold's model of N_subtypes
+            pickle_filename_fold_s          = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(i) + '_subtype' + str(N_subtypes-1) + '.pickle')        
+            pickle_filepath                 = Path(pickle_filename_fold_s)
+
+            assert pickle_filepath.exists(), f"Failed to find pickle file for fold {i}"
+
+            pickle_file                     = open(pickle_filename_fold_s, 'rb')
+            loaded_variables_i              = pickle.load(pickle_file)
+
+            ml_sequence_EM_i                = loaded_variables_i["ml_sequence_EM"]
+            ml_f_EM_i                       = loaded_variables_i["ml_f_EM"]
+
+            samples_sequence_i              = loaded_variables_i["samples_sequence"]
+            samples_f_i                     = loaded_variables_i["samples_f"]
+            
+            if self.apoe_flag:
+                samples_genetic_weights_i   = loaded_variables_i["samples_genetic_weights"]
+
+            pickle_file.close()
+
+            # Calculate Kendall's tau correlation matrix based on anatomical layouts
+            corr_mat                        = np.zeros((N_subtypes, N_subtypes))
+            for j in range(N_subtypes):
+                for k in range(N_subtypes):
+                    corr_mat[j,k]            = stats.kendalltau(np.argsort(ml_sequence_EM_full[j,:]), np.argsort(ml_sequence_EM_i[k,:])).correlation
+            
+            set_full                        = []
+            set_fold_i                      = []
+            i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
+            for k in range(len(i_i)):
+                if not i_i[k] in set_full and not i_j[k] in set_fold_i:
+                    set_full.append(i_i[k].astype(int))
+                    set_fold_i.append(i_j[k].astype(int))
+            index_set_full                  = np.argsort(set_full).astype(int)
+            iMax_vec                        = [set_fold_i[m] for m in index_set_full]
+
+            assert(np.all(np.sort(iMax_vec)==np.arange(N_subtypes)))
+
+            # Concatenate arrays along the iteration timeline dimensions
+            if i == 0:
+                samples_sequence_cval       = samples_sequence_i[iMax_vec,:,:]
+                samples_f_cval              = samples_f_i[iMax_vec, :]
+                if self.apoe_flag:
+                    samples_genetic_cval    = samples_genetic_weights_i[iMax_vec,:,:]
+            else:
+                samples_sequence_cval       = np.concatenate((samples_sequence_cval,    samples_sequence_i[iMax_vec,:,:]),  axis=2)
+                samples_f_cval              = np.concatenate((samples_f_cval,           samples_f_i[iMax_vec,:]),           axis=1)
+                if self.apoe_flag:
+                    samples_genetic_cval    = np.concatenate((samples_genetic_cval,      samples_genetic_weights_i[iMax_vec,:,:]), axis=2)
+
+        n_samples                           = self.__sustainData.getNumSamples()
+
+        # Order of subtypes displayed in positional variance diagrams plotted by _plot_sustain_model
+        plot_subtype_order                  = np.argsort(ml_f_EM_full)[::-1]
+        # Order of biomarkers in each subtypes' positional variance diagram
+        plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
+
+        figs, ax = self._plot_sustain_model(
+            samples_sequence=samples_sequence_cval,
+            samples_f=samples_f_cval,
+            n_samples=n_samples,
+            cval=True,
+            biomarker_labels=self.biomarker_labels,
+            subtype_order=plot_subtype_order,
+            biomarker_order=plot_biomarker_order,
+            **kwargs
+        )
+        
+        # ---------------------------------------------------------------------
+        # REPORT OUT-OF-FOLD CROSS-VALIDATED GENETIC MATRIX PROFILES
+        # ---------------------------------------------------------------------
+        if self.apoe_flag:
+            print("\n" + "="*60)
+            print("    CROSS-VALIDATED GENETIC PRIOR PREVALENCE PROFILE")
+            print("="*60)
+            # Take the mean across all combined cross-validation iterations safely
+            mean_genetic_weights_cval = np.mean(samples_genetic_cval, axis=2)
+            for subtype_idx in plot_subtype_order:
+                weights_str = ", ".join([f"Cat_{c}: {w:.4f}" for c, w in enumerate(mean_genetic_weights_cval[subtype_idx])])
+                print(f" -> CV-Stabilized Subtype {subtype_idx + 1} Prior Profile: [{weights_str}]")
+            print("="*60 + "\n")
+
+        if "save_path" not in kwargs:
+            if len(figs) > 1:
+                for num_subtype, fig in zip(range(N_subtypes), figs):
+                    plot_fname = Path(self.output_folder) / f"{self.dataset_name}_subtype{N_subtypes - 1}_subtype{num_subtype}-separated_PVD_{N_folds}fold_CV.{plot_format}"
+                    fig.savefig(plot_fname, bbox_inches='tight')
+                    fig.show()
+            else:
+                fig = figs[0]
+                plot_fname = Path(self.output_folder) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.{plot_format}"
+                fig.savefig(plot_fname, bbox_inches='tight')
+                fig.show()
+                
+        # Optional return expansion for downstream testing wrappers
+        # if self.apoe_flag:
+        #     return samples_sequence_cval, samples_f_cval, samples_genetic_cval
+        # return samples_sequence_cval, samples_f_cval
+    
     def combine_cross_validated_sequences(self, N_subtypes, N_folds, plot_format="png", **kwargs):
         # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
         # so that you get more realistic estimates of variance within event positions within subtypes
@@ -1218,8 +1402,8 @@ class AbstractSustain(ABC):
     
     def _perform_em(self, sustainData, current_sequence, current_f, rng, current_genetic_weights=None):
         # allow method to be updated from input
-        method = 'combined'
-        #method = 'alternating'
+        #method = 'combined'
+        method = 'alternating'
         use_burn_in_phase = True
         
         if self.apoe_flag:
@@ -1633,7 +1817,7 @@ class AbstractSustain(ABC):
         else:
             return seq_sigma_opt, f_sigma_opt
 
-    def _evaluate_likelihood_setofsamples(self, sustainData, samples_sequence, samples_f):
+    def _evaluate_likelihood_setofsamples(self, sustainData, samples_sequence, samples_f, samples_genetic_weights=None):
     
         n_total                             = samples_sequence.shape[2]
     
@@ -1648,6 +1832,9 @@ class AbstractSustain(ABC):
     
         samples_sequence                    = samples_sequence[:, :, select_samples]
         samples_f                           = samples_f[:, select_samples]
+        
+        if self.apoe_flag:
+            samples_genetic_weights         = samples_genetic_weights[:,:,select_samples]
     
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
@@ -1656,8 +1843,11 @@ class AbstractSustain(ABC):
         for i in range(n_iterations):
             S                               = samples_sequence[:, :, i]
             f                               = samples_f[:, i]
-
-            _, likelihood_sample_subj, _, _, _  = self._calculate_likelihood(sustainData, S, f)
+            if self.apoe_flag:
+                genetic_weights             = samples_genetic_weights[:,:,i]
+                _, likelihood_sample_subj, _, _, _  = self._calculate_likelihood(sustainData, S, f,genetic_weights)
+            else:
+                _, likelihood_sample_subj, _, _, _  = self._calculate_likelihood(sustainData, S, f)
 
             samples_likelihood_subj[:, i]   = likelihood_sample_subj
 
