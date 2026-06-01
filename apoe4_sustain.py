@@ -904,7 +904,8 @@ class AbstractSustain(ABC):
                         ml_likelihood_mat   = this_ml_likelihood_mat[0]
                         ml_sequence_mat     = this_ml_sequence_mat[:, :, 0]
                         ml_f_mat            = this_ml_f_mat[:, 0]
-                        em_likelihood_histories = this_em_likelihood_histories[:,0]
+                        # we're not removing the startingpoint dimension bc we want the EM lik from all startingpoints
+                        em_likelihood_histories = this_em_likelihood_histories
                         
                         if self.apoe_flag:
                             ml_genetic_weights = this_ml_genetic_weights[:,:,0]
@@ -1019,28 +1020,28 @@ class AbstractSustain(ABC):
     
     # Please try both initialisation methods in experiments to decide which one works better
     
-    def _initialise_genetic_weights(self, N_S,rng=None):
-        """
-        Initialises genetic weights using a flat, unconstrained Dirichlet distribution.
+    # def _initialise_genetic_weights(self, N_S,rng=None):
+    #     """
+    #     Initialises genetic weights using a flat, unconstrained Dirichlet distribution.
         
-        EXPERIMENTAL BEHAVIOR TO TRACK:
-        - Space Exploration: MAXIMUM. Each parallel startpoint gets wildly different 
-          initial weights (e.g., one worker might guess a subtype is 90% APOE4 carriers, 
-          while another guesses 5%). Great for breaking out of local minima.
-        - Convergence Speed: SLOWER. Because the initial guesses are often highly 
-          unrealistic compared to the actual cohort, the EM loop must spend its first 
-          few iterations doing heavy lifting to pull these weights back toward reality.
-        """
-        # alpha=[1, 1, 1] creates a uniform distribution over a probability simplex.
-        # It natively ensures that each row sums to exactly 1.0 while maximizing 
-        # variance between different random draws across parallel workers.
-        # Shape output: (N_S, 3) representing [Genotype_0, Genotype_1, Genotype_2] per subtype.
-        if rng is None:
-            rng = getattr(self, 'global_rng', np.random.default_rng())
-        alpha_vector = [1] * self.N_genetic_categories
-        genetic_weights = rng.dirichlet(alpha=alpha_vector, size=N_S)
+    #     EXPERIMENTAL BEHAVIOR TO TRACK:
+    #     - Space Exploration: MAXIMUM. Each parallel startpoint gets wildly different 
+    #       initial weights (e.g., one worker might guess a subtype is 90% APOE4 carriers, 
+    #       while another guesses 5%). Great for breaking out of local minima.
+    #     - Convergence Speed: SLOWER. Because the initial guesses are often highly 
+    #       unrealistic compared to the actual cohort, the EM loop must spend its first 
+    #       few iterations doing heavy lifting to pull these weights back toward reality.
+    #     """
+    #     # alpha=[1, 1, 1] creates a uniform distribution over a probability simplex.
+    #     # It natively ensures that each row sums to exactly 1.0 while maximizing 
+    #     # variance between different random draws across parallel workers.
+    #     # Shape output: (N_S, 3) representing [Genotype_0, Genotype_1, Genotype_2] per subtype.
+    #     if rng is None:
+    #         rng = getattr(self, 'global_rng', np.random.default_rng())
+    #     alpha_vector = [1] * self.N_genetic_categories
+    #     genetic_weights = rng.dirichlet(alpha=alpha_vector, size=N_S)
         
-        return genetic_weights
+    #     return genetic_weights
     
     def _initialise_genetic_weights(self,N_S, rng=None):
         """
@@ -1077,6 +1078,7 @@ class AbstractSustain(ABC):
         # and 30% dedicated to pure random exploration. 
         # NOTE: If your experiments show too little exploration, drop w to 0.50.
         w = 0.70 
+        #w = 0.30
         genetic_weights_init = (w * genetic_weights_baseline) + ((1.0 - w) * random_exploration)
         
         # Numerical Safeguards:
@@ -1230,6 +1232,7 @@ class AbstractSustain(ABC):
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
             
+            # to ravel or not to ravel?
             em_likelihood_histories[:,i]    = pool_output_list[i][5].ravel()
             
             if self.apoe_flag:
@@ -1309,7 +1312,7 @@ class AbstractSustain(ABC):
         # allow method to be updated from input
         #method = 'combined'
         method = 'alternating'
-        use_burn_in_phase = True
+        use_burn_in_phase = False
         
         if self.apoe_flag:
             if use_burn_in_phase:
@@ -1318,12 +1321,12 @@ class AbstractSustain(ABC):
                     sustainData, current_sequence, current_f, rng, burn_in_iters=0
                 )
                 
-                if method == 'alternating':
-                    print('Using',method,'method' )
-                    return self._perform_em_alternating(sustainData, current_sequence, current_f, rng, current_genetic_weights)
-                else:
-                    print('Using',method,'method')
-                    return self._perform_em_combined(sustainData, current_sequence, current_f, rng, current_genetic_weights)
+            if method == 'alternating':
+                print('Using',method,'method' )
+                return self._perform_em_alternating(sustainData, current_sequence, current_f, rng, current_genetic_weights)
+            else:
+                print('Using',method,'method')
+                return self._perform_em_combined(sustainData, current_sequence, current_f, rng, current_genetic_weights)
 
         # Perform an E-M procedure to estimate parameters of SuStaIn model
         MaxIter                             = 100
