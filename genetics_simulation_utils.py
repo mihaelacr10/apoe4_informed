@@ -198,26 +198,26 @@ def new_simulation_function(point = False):
                                                                    Z_max)
     return data, gt_data_denoised, gt_stage_value, gt_stages, gt_subtypes, gt_sequence
 
-data, gt_data_denoised, gt_stage_value, gt_stages, gt_subtypes, gt_sequence = new_simulation_function(point=False)
-df = pd.DataFrame(data)
-df['gt_subtypes'] = gt_subtypes
-df['gt_stages'] = gt_stages
-print('Gt sequence', gt_sequence)
+# data, gt_data_denoised, gt_stage_value, gt_stages, gt_subtypes, gt_sequence = new_simulation_function(point=False)
+# df = pd.DataFrame(data)
+# df['gt_subtypes'] = gt_subtypes
+# df['gt_stages'] = gt_stages
+# print('Gt sequence', gt_sequence)
 
-import matplotlib.pyplot as plt
-plt.hist(gt_stages)
-plt.title('Stages distribution')
+# import matplotlib.pyplot as plt
+# plt.hist(gt_stages)
+# plt.title('Stages distribution')
 
 
-data1, gt_data_denoised1, gt_stage_valu1, gt_stages1, gt_subtypes1, gt_sequence1 = new_simulation_function(point=True)
-df1 = pd.DataFrame(data1)
-df1['gt_subtypes'] = gt_subtypes1
-df1['gt_stages'] = gt_stages1
-print('Gt sequence', gt_sequence1)
+# data1, gt_data_denoised1, gt_stage_valu1, gt_stages1, gt_subtypes1, gt_sequence1 = new_simulation_function(point=True)
+# df1 = pd.DataFrame(data1)
+# df1['gt_subtypes'] = gt_subtypes1
+# df1['gt_stages'] = gt_stages1
+# print('Gt sequence', gt_sequence1)
 
-import matplotlib.pyplot as plt
-plt.hist(gt_stages)
-plt.title('Stages distribution')
+# import matplotlib.pyplot as plt
+# plt.hist(gt_stages)
+# plt.title('Stages distribution')
 
 
 # Example of how to simulate genetics 

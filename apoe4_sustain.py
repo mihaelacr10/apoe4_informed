@@ -176,6 +176,7 @@ class AbstractSustain(ABC):
                     ml_sequence_mat_EM,        \
                     ml_f_mat_EM,               \
                     ml_likelihood_mat_EM,      \
+                    em_likelihood_histories,   \
                     ml_genetic_weights_EM,     \
                     ml_genetic_weights_mat_EM  = self._estimate_ml_sustain_model_nplus1_clusters(self.__sustainData, ml_sequence_prev_EM, ml_f_prev_EM, ml_genetic_weights_prev_EM) #self.__estimate_ml_sustain_model_nplus1_clusters(self.__data, ml_sequence_prev_EM, ml_f_prev_EM)
                 else:
@@ -185,7 +186,8 @@ class AbstractSustain(ABC):
                     ml_likelihood_EM,   \
                     ml_sequence_mat_EM, \
                     ml_f_mat_EM,        \
-                    ml_likelihood_mat_EM        = self._estimate_ml_sustain_model_nplus1_clusters(self.__sustainData, ml_sequence_prev_EM, ml_f_prev_EM) #self.__estimate_ml_sustain_model_nplus1_clusters(self.__data, ml_sequence_prev_EM, ml_f_prev_EM)
+                    ml_likelihood_mat_EM,\
+                    em_likelihood_histories  = self._estimate_ml_sustain_model_nplus1_clusters(self.__sustainData, ml_sequence_prev_EM, ml_f_prev_EM) #self.__estimate_ml_sustain_model_nplus1_clusters(self.__data, ml_sequence_prev_EM, ml_f_prev_EM)
 
                 seq_init                    = ml_sequence_EM
                 f_init                      = ml_f_EM
@@ -294,6 +296,10 @@ class AbstractSustain(ABC):
                 if self.apoe_flag:
                     save_variables["ml_genetic_weights_EM"] = ml_genetic_weights_EM
                     save_variables["ml_genetic_weights_prev_EM"] = ml_genetic_weights_prev_EM
+                
+                # save lik history of diff EM startingpoints to plot and check convergence
+                save_variables["ml_likelihood_mat_EM"] = ml_likelihood_mat_EM
+                save_variables["em_likelihood_histories"] = em_likelihood_histories
 
                 pickle_file                 = open(pickle_filename_s, 'wb')
                 pickle_output               = pickle.dump(save_variables, pickle_file)
@@ -672,130 +678,6 @@ class AbstractSustain(ABC):
         #     return samples_sequence_cval, samples_f_cval, samples_genetic_cval
         # return samples_sequence_cval, samples_f_cval
     
-    def combine_cross_validated_sequences(self, N_subtypes, N_folds, plot_format="png", **kwargs):
-        # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
-        # so that you get more realistic estimates of variance within event positions within subtypes
-
-        pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
-
-        #*********** load ML sequence for full model for N_subtypes
-        pickle_filename_s                   = os.path.join(pickle_dir, self.dataset_name + '_subtype' + str(N_subtypes-1) + '.pickle')        
-        pickle_filepath                     = Path(pickle_filename_s)
-
-        assert pickle_filepath.exists(), "Failed to find pickle file for full model with " + str(N_subtypes) + " subtypes."
-
-        pickle_file                         = open(pickle_filename_s, 'rb')
-
-        loaded_variables_full               = pickle.load(pickle_file)
-
-        ml_sequence_EM_full                 = loaded_variables_full["ml_sequence_EM"]
-        ml_f_EM_full                        = loaded_variables_full["ml_f_EM"]
-
-        #REMOVED SO THAT PLOT_SUBTYPE_ORDER WORKS THE SAME HERE AS IN run_sustain_algorithm
-        #re-index so that subtypes are in descending order by fraction of subjects
-        # index_EM_sort                       = np.argsort(ml_f_EM_full)[::-1]
-        # ml_sequence_EM_full                 = ml_sequence_EM_full[index_EM_sort,:]
-        # ml_f_EM_full                        = ml_f_EM_full[index_EM_sort]
-
-        for i in range(N_folds):
-
-            #load the MCMC sequences for this fold's model of N_subtypes
-            pickle_filename_fold_s          = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(i) + '_subtype' + str(N_subtypes-1) + '.pickle')        
-            pickle_filepath                 = Path(pickle_filename_fold_s)
-
-            assert pickle_filepath.exists(), "Failed to find pickle file for fold " + str(i)
-
-            pickle_file                     = open(pickle_filename_fold_s, 'rb')
-
-            loaded_variables_i              = pickle.load(pickle_file)
-
-            ml_sequence_EM_i                = loaded_variables_i["ml_sequence_EM"]
-            ml_f_EM_i                       = loaded_variables_i["ml_f_EM"]
-
-            samples_sequence_i              = loaded_variables_i["samples_sequence"]
-            samples_f_i                     = loaded_variables_i["samples_f"]
-
-            mean_likelihood_subj_test       = loaded_variables_i["mean_likelihood_subj_test"]
-
-            pickle_file.close()
-
-            # Really simple approach: choose order based on this fold's fraction of subjects per subtype
-            # It doesn't work very well when the fractions of subjects are similar across subtypes
-            #mean_f_i                        = np.mean(samples_f_i, 1)
-            #iMax_vec                        = np.argsort(mean_f_i)[::-1]
-            #iMax_vec                        = iMax_vec.astype(int)
-
-            #This approach seems to work better:
-            # 1. calculate the Kendall's tau correlation matrix,
-            # 2. Flatten the matrix into a vector
-            # 3. Sort the vector, then unravel the flattened indices back into matrix style (x, y) indices
-            # 4. Find the order in which this fold's subtypes first appear in the sorted list
-            corr_mat                        = np.zeros((N_subtypes, N_subtypes))
-            for j in range(N_subtypes):
-                for k in range(N_subtypes):
-                    corr_mat[j,k]            = stats.kendalltau(np.argsort(ml_sequence_EM_full[j,:]), np.argsort(ml_sequence_EM_i[k,:])).correlation
-            set_full                        = []
-            set_fold_i                      = []
-            i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
-            for k in range(len(i_i)):
-                if not i_i[k] in set_full and not i_j[k] in set_fold_i:
-                    set_full.append(i_i[k].astype(int))
-                    set_fold_i.append(i_j[k].astype(int))
-            index_set_full                  = np.argsort(set_full).astype(int) #np.argsort(set_full)[::-1].astype(int)
-            iMax_vec                        = [set_fold_i[i] for i in index_set_full]
-
-            assert(np.all(np.sort(iMax_vec)==np.arange(N_subtypes)))
-
-            if i == 0:
-                samples_sequence_cval       = samples_sequence_i[iMax_vec,:,:]
-                samples_f_cval              = samples_f_i[iMax_vec, :]
-            else:
-                samples_sequence_cval       = np.concatenate((samples_sequence_cval,    samples_sequence_i[iMax_vec,:,:]),  axis=2)
-                samples_f_cval              = np.concatenate((samples_f_cval,           samples_f_i[iMax_vec,:]),           axis=1)
-
-        n_samples                           = self.__sustainData.getNumSamples()
-
-        #ADDED HERE BECAUSE THIS MAY BE CALLED BY CALLED FOR A RANGE OF N_S_max, AS IN simrun.py
-        # order of subtypes displayed in positional variance diagrams plotted by _plot_sustain_model
-        plot_subtype_order                  = np.argsort(ml_f_EM_full)[::-1]
-        # order of biomarkers in each subtypes' positional variance diagram
-        plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
-
-        figs, ax = self._plot_sustain_model(
-            samples_sequence=samples_sequence_cval,
-            samples_f=samples_f_cval,
-            n_samples=n_samples,
-            cval=True,
-            biomarker_labels=self.biomarker_labels,
-            subtype_order=plot_subtype_order,
-            biomarker_order=plot_biomarker_order,
-            **kwargs
-        )
-        # If saving is being done here
-        if "save_path" not in kwargs:
-            # Handle separated subtypes
-            if len(figs) > 1:
-                # Loop over each figure/subtype
-                for num_subtype, fig in zip(range(N_subtypes), figs):
-                    # Nice confusing filename
-                    plot_fname = Path(
-                        self.output_folder
-                    ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_subtype{num_subtype}-separated_PVD_{N_folds}fold_CV.{plot_format}"
-                    # Save the figure
-                    fig.savefig(plot_fname, bbox_inches='tight')
-                    fig.show()
-            # Otherwise default single plot
-            else:
-                fig = figs[0]
-                # save and show this figure after all subtypes have been calculcated
-                plot_fname = Path(
-                    self.output_folder
-                ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.{plot_format}"
-                # Save the figure
-                fig.savefig(plot_fname, bbox_inches='tight')
-                fig.show()
-
-        #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
 
     def subtype_and_stage_individuals(self, sustainData, samples_sequence, samples_f, N_samples, samples_genetic_weights=None):
         # Subtype and stage a set of subjects. Useful for subtyping/staging subjects that were not used to build the model
@@ -914,17 +796,21 @@ class AbstractSustain(ABC):
                 ml_sequence_mat,       \
                 ml_f_mat,              \
                 ml_genetic_weights_mat,\
-                ml_likelihood_mat               = self._find_ml(sustainData)
+                ml_likelihood_mat,     \
+                em_likelihood_histories  = self._find_ml(sustainData)
             else: 
                 ml_sequence,        \
                 ml_f,               \
                 ml_likelihood,      \
                 ml_sequence_mat,    \
                 ml_f_mat,           \
-                ml_likelihood_mat               = self._find_ml(sustainData)
+                ml_likelihood_mat,  \
+                em_likelihood_histories  = self._find_ml(sustainData)
                 print('Overall ML likelihood is', ml_likelihood)
 
         else:
+            #em_likelihood_histories = []
+            
             # If the number of subtypes is greater than 1, go through each subtype
             # in turn and try splitting into two subtypes
             
@@ -994,6 +880,7 @@ class AbstractSustain(ABC):
                         this_ml_sequence_mat,   \
                         this_ml_f_mat,          \
                         this_ml_likelihood_mat, \
+                        this_em_likelihood_histories,\
                         this_ml_genetic_weights,\
                         this_ml_genetic_weights_mat = self._find_ml_mixture(sustainData, this_seq_init, this_f_init, this_genetic_weights_init)
                     
@@ -1003,7 +890,8 @@ class AbstractSustain(ABC):
                         this_ml_likelihood,     \
                         this_ml_sequence_mat,   \
                         this_ml_f_mat,          \
-                        this_ml_likelihood_mat    = self._find_ml_mixture(sustainData, this_seq_init, this_f_init)
+                        this_ml_likelihood_mat, \
+                        this_em_likelihood_histories = self._find_ml_mixture(sustainData, this_seq_init, this_f_init)
 
                     # Choose the most probable SuStaIn model from the different
                     # possible SuStaIn models initialised by splitting each subtype
@@ -1016,6 +904,7 @@ class AbstractSustain(ABC):
                         ml_likelihood_mat   = this_ml_likelihood_mat[0]
                         ml_sequence_mat     = this_ml_sequence_mat[:, :, 0]
                         ml_f_mat            = this_ml_f_mat[:, 0]
+                        em_likelihood_histories = this_em_likelihood_histories[:,0]
                         
                         if self.apoe_flag:
                             ml_genetic_weights = this_ml_genetic_weights[:,:,0]
@@ -1027,9 +916,9 @@ class AbstractSustain(ABC):
             print(f'Overall ML likelihood is', ml_likelihood)
 
         if self.apoe_flag:
-            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, ml_genetic_weights, ml_genetic_weights_mat
+            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, em_likelihood_histories, ml_genetic_weights, ml_genetic_weights_mat
         else:
-            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
+            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, em_likelihood_histories
 
     #********************************************
 
@@ -1055,16 +944,26 @@ class AbstractSustain(ABC):
         if self.apoe_flag:
             N_S = 1 # is find ml just for 1 subtype
             ml_genetic_weights_mat          = np.zeros((N_S, self.N_genetic_categories, self.N_startpoints))
-
+        
+        #em_likelihood_histories = []
+        
+        # creating an array to store all iterations of all startingpoints EM likelihoods
+        MaxIter = 100
+        em_likelihood_histories = np.nan * np.ones((MaxIter,self.N_startpoints ))
+        
         for i in range(self.N_startpoints):
             ml_sequence_mat[:, :, i]        = pool_output_list[i][0]
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
+            # append the em lik history 
+            #em_likelihood_histories.append(pool_output_list[i][3])
+            em_likelihood_histories[:,i]    = pool_output_list[i][3].ravel()
             
             if self.apoe_flag:
-                ml_genetic_weights_mat[:,:,i]            = pool_output_list[i][3]
+                ml_genetic_weights_mat[:,:,i]            = pool_output_list[i][4]
                 
-
+        # save the array of likelihoods  ml_likelihood_mat
+    
         ix                                  = np.argmax(ml_likelihood_mat)
         ml_sequence                         = ml_sequence_mat[:, :, ix]
         ml_f                                = ml_f_mat[:, ix]
@@ -1073,9 +972,9 @@ class AbstractSustain(ABC):
             ml_genetic_weights              = ml_genetic_weights_mat[:,:,ix]
             
             return (ml_sequence, ml_f, ml_genetic_weights, ml_likelihood, 
-                    ml_sequence_mat, ml_f_mat, ml_genetic_weights_mat, ml_likelihood_mat)
+                    ml_sequence_mat, ml_f_mat, ml_genetic_weights_mat, ml_likelihood_mat, em_likelihood_histories)
 
-        return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
+        return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, em_likelihood_histories
 
     def _find_ml_iteration(self, sustainData, seed_seq):
         #Convenience sub-function for above
@@ -1101,7 +1000,7 @@ class AbstractSustain(ABC):
             _,                  \
             _,                  \
             _,                  \
-            _                               = self._perform_em(sustainData, seq_init, f_init, rng, genetic_weights_init)
+            samples_likelihood              = self._perform_em(sustainData, seq_init, f_init, rng, genetic_weights_init)
 
             
         else:
@@ -1111,12 +1010,12 @@ class AbstractSustain(ABC):
             this_ml_likelihood, \
             _,                  \
             _,                  \
-            _                               = self._perform_em(sustainData, seq_init, f_init, rng)
+            samples_likelihood              = self._perform_em(sustainData, seq_init, f_init, rng)
 
         if self.apoe_flag:
-            return this_ml_sequence, this_ml_f, this_ml_likelihood,  this_ml_genetic_weights
+            return this_ml_sequence, this_ml_f, this_ml_likelihood,  samples_likelihood, this_ml_genetic_weights
         else:
-            return this_ml_sequence, this_ml_f, this_ml_likelihood
+            return this_ml_sequence, this_ml_f, this_ml_likelihood, samples_likelihood
     
     # Please try both initialisation methods in experiments to decide which one works better
     
@@ -1318,6 +1217,10 @@ class AbstractSustain(ABC):
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
         ml_likelihood_mat                   = np.zeros((self.N_startpoints, 1))
         
+        # creating an array to store all iterations of all startingpoints EM likelihoods
+        MaxIter = 100
+        em_likelihood_histories = np.nan * np.ones((MaxIter,self.N_startpoints ))
+        
         if self.apoe_flag:
             ml_genetic_weights_mat          = np.zeros((N_S,self.N_genetic_categories,self.N_startpoints))
 
@@ -1326,6 +1229,8 @@ class AbstractSustain(ABC):
             ml_sequence_mat[:, :, i]        = pool_output_list[i][0]
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
+            
+            em_likelihood_histories[:,i]    = pool_output_list[i][5].ravel()
             
             if self.apoe_flag:
                 ml_genetic_weights_mat[:,:,i] = pool_output_list[i][6]
@@ -1342,9 +1247,9 @@ class AbstractSustain(ABC):
         if self.apoe_flag:
             ml_genetic_weights              = ml_genetic_weights_mat[:,:,ix]
 
-            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, ml_genetic_weights, ml_genetic_weights_mat
+            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, em_likelihood_histories, ml_genetic_weights, ml_genetic_weights_mat
         else:
-            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
+            return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, em_likelihood_histories
 
     def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_seq, genetic_weights_init=None):
         #Convenience sub-function for above
@@ -1356,12 +1261,12 @@ class AbstractSustain(ABC):
             
             ml_sequence,        \
             ml_f,               \
-            ml_genetic_weights ,\
+            ml_genetic_weights, \
             ml_likelihood,      \
             samples_sequence,   \
             samples_f,          \
-            samples_likelihood, \
-            samples_genetic_weights             = self._perform_em(sustainData, seq_init, f_init, rng, genetic_weights_init)
+            samples_genetic_weights,\
+            samples_likelihood,                = self._perform_em(sustainData, seq_init, f_init, rng, genetic_weights_init)
         
             return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood, ml_genetic_weights, samples_genetic_weights
         

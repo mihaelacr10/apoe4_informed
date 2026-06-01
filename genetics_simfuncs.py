@@ -142,7 +142,7 @@ def generate_data_Zscore_sustain(subtypes, stages, gt_ordering, Z_vals, Z_max):
 
     min_biomarker_zscore                = [0]*B
     max_biomarker_zscore                = Z_max
-    std_biomarker_zscore                = [1]*B
+    std_biomarker_zscore                = [1]*B # [0]*B
 
     N                                   = stage_biomarker_index.shape[1]
     N_S                                 = gt_ordering.shape[0]
@@ -176,65 +176,65 @@ def generate_data_Zscore_sustain(subtypes, stages, gt_ordering, Z_vals, Z_max):
 
     return data, data_denoised, stage_value
 
+def generate_data_Zscore_sustain_point(subtypes, stages, gt_ordering, Z_vals, Z_max):
+    B                                   = Z_vals.shape[0]
+    stage_zscore                        = np.array([y for x in Z_vals.T for y in x])
+    stage_zscore                        = stage_zscore.reshape(1,len(stage_zscore))
+    IX_select                           = stage_zscore>0
+    stage_zscore                        = stage_zscore[IX_select]
+    stage_zscore                        = stage_zscore.reshape(1,len(stage_zscore))
 
+    num_zscores                         = Z_vals.shape[1]
+    IX_vals                             = np.array([[x for x in range(B)]] * num_zscores).T
+    stage_biomarker_index               = np.array([y for x in IX_vals.T for y in x])
+    stage_biomarker_index               = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+    stage_biomarker_index               = stage_biomarker_index[IX_select]
+    stage_biomarker_index               = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
 
-def generate_data_Zscore_sustain_point(subtypes, stages, gt_ordering, Z_vals, Z_max, M_outlier):
-    B = Z_vals.shape[0]
-    
-    stage_zscore = np.array([y for x in Z_vals.T for y in x]).reshape(1, -1)
-    IX_select = stage_zscore > 0
-    stage_zscore = stage_zscore[IX_select].reshape(1, -1)
+    min_biomarker_zscore                = [0]*B
+    max_biomarker_zscore                = Z_max
+    std_biomarker_zscore                = [1]*B
 
-    num_zscores = Z_vals.shape[1]
-    IX_vals = np.array([[x for x in range(B)]] * num_zscores).T
-    stage_biomarker_index = np.array([y for x in IX_vals.T for y in x]).reshape(1, -1)
-    stage_biomarker_index = stage_biomarker_index[IX_select].reshape(1, -1)
+    N                                   = stage_biomarker_index.shape[1]
+    N_S                                 = gt_ordering.shape[0]
 
-    min_biomarker_zscore = [0] * B
-    max_biomarker_zscore = Z_max
-    std_biomarker_zscore = [1] * B
-
-    N = stage_biomarker_index.shape[1]
-    N_S = gt_ordering.shape[0]
-    possible_biomarkers = np.unique(stage_biomarker_index)
+    possible_biomarkers                 = np.unique(stage_biomarker_index)
     point_value = np.zeros((B, N + 2, N_S))
+    stage_value                         = np.zeros((B,N+2,N_S))
 
     for s in range(N_S):
-        S = gt_ordering[s, :]
-        S_inv = np.zeros(N, dtype=int)
-        S_inv[S.astype(int)] = np.arange(N)
+        S                               = gt_ordering[s,:]
+        S_inv                           = np.array([0]*N)
+        S_inv[S.astype(int)]            = np.arange(N)
         for i in range(B):
-            b = possible_biomarkers[i]
-            event_location = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
-            event_value = np.concatenate([[min_biomarker_zscore[i]], 
-                                          stage_zscore[stage_biomarker_index == b], 
-                                          [max_biomarker_zscore[i]]])
-            for j in range(len(event_location) - 1):
-                if j == 0:
-                    index = np.arange(event_location[j], event_location[j + 1] + 2)
+            b                           = possible_biomarkers[i]
+            event_location              = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
+            event_value                 = np.concatenate([[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index == b], [max_biomarker_zscore[i]]])
+
+            for j in range(len(event_location)-1):
+
+                if j == 0: # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
+                    index               = np.arange(event_location[j],event_location[j+1]+2)
+                    stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
                     point_value[i, index, s] = np.linspace(event_value[j], event_value[j + 1], 
-                                                          event_location[j + 1] - event_location[j] + 2)
+                                                                               event_location[j + 1] - event_location[j] + 2)
                 else:
-                    index = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                    index               = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                    stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
                     point_value[i, index, s] = np.linspace(event_value[j], event_value[j + 1], 
                                                           event_location[j + 1] - event_location[j] + 1)
 
-    stage_value = 0.5 * point_value[:, :point_value.shape[1] - 1] + 0.5 * point_value[:, 1:]
-    M = stages.shape[0]
-    data_denoised = np.zeros((M, B))
+
+    M                                   = stages.shape[0]
+    data_denoised                       = np.zeros((M,B))
     for m in range(M):
-        data_denoised[m, :] = stage_value[:, int(stages[m]), subtypes[m]]
+        data_denoised[m,:]              = stage_value[:,int(stages[m]),subtypes[m]]
+    data                                = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
+
+    return data, data_denoised, stage_value
+
+
+
     
-    data = data_denoised + norm.ppf(np.random.rand(B, M).T) * np.tile(std_biomarker_zscore, (M, 1))
 
-    if M_outlier != 0:
-        data_outlier_denoised = np.zeros((M_outlier, B))
-        for m in range(M_outlier):
-            unif_biom = min_biomarker_zscore + (max_biomarker_zscore - min_biomarker_zscore) * np.random.rand(B)
-            data_outlier_denoised[m, :] = unif_biom
-        
-        data_outlier = data_outlier_denoised + norm.ppf(np.random.rand(B, M_outlier).T) * np.tile(std_biomarker_zscore, (M_outlier, 1))
-        data = np.vstack((data, data_outlier))
-
-    return data, data_denoised
 
