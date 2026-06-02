@@ -864,11 +864,6 @@ class AbstractSustain(ABC):
                     #initialize fraction of subjects in each subtype to be uniform
                     this_f_init             = np.array([1.] * N_S) / float(N_S)
                     
-                    # initilise genetic weights
-                    if self.apoe_flag:
-                        this_genetic_weights_init = self._initialise_genetic_weights(N_S= N_S)
-                        print('Genetic weights init', this_genetic_weights_init)
-                
  
                     print(' + Finding ML solution from hierarchical initialisation')
                     
@@ -882,7 +877,7 @@ class AbstractSustain(ABC):
                         this_ml_likelihood_mat, \
                         this_em_likelihood_histories,\
                         this_ml_genetic_weights,\
-                        this_ml_genetic_weights_mat = self._find_ml_mixture(sustainData, this_seq_init, this_f_init, this_genetic_weights_init)
+                        this_ml_genetic_weights_mat = self._find_ml_mixture(sustainData, this_seq_init, this_f_init)
                     
                     else:
                         this_ml_sequence,       \
@@ -1020,77 +1015,77 @@ class AbstractSustain(ABC):
     
     # Please try both initialisation methods in experiments to decide which one works better
     
-    # def _initialise_genetic_weights(self, N_S,rng=None):
-    #     """
-    #     Initialises genetic weights using a flat, unconstrained Dirichlet distribution.
-        
-    #     EXPERIMENTAL BEHAVIOR TO TRACK:
-    #     - Space Exploration: MAXIMUM. Each parallel startpoint gets wildly different 
-    #       initial weights (e.g., one worker might guess a subtype is 90% APOE4 carriers, 
-    #       while another guesses 5%). Great for breaking out of local minima.
-    #     - Convergence Speed: SLOWER. Because the initial guesses are often highly 
-    #       unrealistic compared to the actual cohort, the EM loop must spend its first 
-    #       few iterations doing heavy lifting to pull these weights back toward reality.
-    #     """
-    #     # alpha=[1, 1, 1] creates a uniform distribution over a probability simplex.
-    #     # It natively ensures that each row sums to exactly 1.0 while maximizing 
-    #     # variance between different random draws across parallel workers.
-    #     # Shape output: (N_S, 3) representing [Genotype_0, Genotype_1, Genotype_2] per subtype.
-    #     if rng is None:
-    #         rng = getattr(self, 'global_rng', np.random.default_rng())
-    #     alpha_vector = [1] * self.N_genetic_categories
-    #     genetic_weights = rng.dirichlet(alpha=alpha_vector, size=N_S)
-        
-    #     return genetic_weights
-    
-    def _initialise_genetic_weights(self,N_S, rng=None):
+    def _initialise_genetic_weights(self, N_S,rng=None):
         """
-        Initialises genetic weights by blending the true global population frequencies 
-        with a random Dirichlet matrix using a tunable mixing weight (w).
+        Initialises genetic weights using a flat, unconstrained Dirichlet distribution.
         
         EXPERIMENTAL BEHAVIOR TO TRACK:
-        - Space Exploration: BALANCED. Workers are structurally unique from each other,
-          but they stay clustered within a reasonable neighborhood of the population baseline.
-        - Convergence Speed: FASTER. Because the model begins near the true demographic 
-          gravity center of your dataset, it eliminates the "burn-in" iterations 
-          wasted on corrections, allowing the clinical sequence shuffler to get to work immediately.
+        - Space Exploration: MAXIMUM. Each parallel startpoint gets wildly different 
+          initial weights (e.g., one worker might guess a subtype is 90% APOE4 carriers, 
+          while another guesses 5%). Great for breaking out of local minima.
+        - Convergence Speed: SLOWER. Because the initial guesses are often highly 
+          unrealistic compared to the actual cohort, the EM loop must spend its first 
+          few iterations doing heavy lifting to pull these weights back toward reality.
         """
-        # Fetch the pre-calculated global background rates of your non-null dataset
-        # e.g., returns a stable vector like [0.542, 0.361, 0.096]
-        global_frequencies = self._global_genetic_frequencies 
-        
-        # Replicate the global background row across all target subtypes.
-        # This acts as your "Exploitation" matrix (fully informed by reality).
-        # Shape: (N_S, 3)
-        genetic_weights_baseline = np.tile(global_frequencies, (N_S, 1))
-        
-        # Generate a wide, unconstrained random Dirichlet matrix.
-        # This acts as your "Exploration" channel, adding unique variance to each parallel worker.
-        # Shape: (N_S, 3)
-        alpha_vector = [1] * self.N_genetic_categories # how many vals there are: 3 for 0,1,2 allele or 2 for 0,1
-        
+        # alpha=[1, 1, 1] creates a uniform distribution over a probability simplex.
+        # It natively ensures that each row sums to exactly 1.0 while maximizing 
+        # variance between different random draws across parallel workers.
+        # Shape output: (N_S, 3) representing [Genotype_0, Genotype_1, Genotype_2] per subtype.
         if rng is None:
             rng = getattr(self, 'global_rng', np.random.default_rng())
-        random_exploration = rng.dirichlet(alpha=alpha_vector, size=N_S)
+        alpha_vector = [1] * self.N_genetic_categories
+        genetic_weights = rng.dirichlet(alpha=alpha_vector, size=N_S)
         
-        # Convex Combination blending: 
-        # w = 0.70 means the starting point is 70% anchored to the real dataset demographics
-        # and 30% dedicated to pure random exploration. 
-        # NOTE: If your experiments show too little exploration, drop w to 0.50.
-        w = 0.70 
-        #w = 0.30
-        genetic_weights_init = (w * genetic_weights_baseline) + ((1.0 - w) * random_exploration)
+        return genetic_weights
+    
+    # def _initialise_genetic_weights(self,N_S, rng=None):
+    #     """
+    #     Initialises genetic weights by blending the true global population frequencies 
+    #     with a random Dirichlet matrix using a tunable mixing weight (w).
         
-        # Numerical Safeguards:
-        # 1. Clip to ensure floating-point variances never create 0.0 or negative probabilities,
-        #    which would crash the log-likelihood calculation downstream.
-        genetic_weights_init = np.clip(genetic_weights_init, 1e-5, 1.0)
+    #     EXPERIMENTAL BEHAVIOR TO TRACK:
+    #     - Space Exploration: BALANCED. Workers are structurally unique from each other,
+    #       but they stay clustered within a reasonable neighborhood of the population baseline.
+    #     - Convergence Speed: FASTER. Because the model begins near the true demographic 
+    #       gravity center of your dataset, it eliminates the "burn-in" iterations 
+    #       wasted on corrections, allowing the clinical sequence shuffler to get to work immediately.
+    #     """
+    #     # Fetch the pre-calculated global background rates of your non-null dataset
+    #     # e.g., returns a stable vector like [0.542, 0.361, 0.096]
+    #     global_frequencies = self._global_genetic_frequencies 
         
-        # 2. Re-normalize row-wise to ensure that the mathematical integrity of the mixture prior 
-        #    is intact (every subtype row must sum strictly to 1.0).
-        genetic_weights_init /= np.sum(genetic_weights_init, axis=1, keepdims=True)
+    #     # Replicate the global background row across all target subtypes.
+    #     # This acts as your "Exploitation" matrix (fully informed by reality).
+    #     # Shape: (N_S, 3)
+    #     genetic_weights_baseline = np.tile(global_frequencies, (N_S, 1))
         
-        return genetic_weights_init
+    #     # Generate a wide, unconstrained random Dirichlet matrix.
+    #     # This acts as your "Exploration" channel, adding unique variance to each parallel worker.
+    #     # Shape: (N_S, 3)
+    #     alpha_vector = [1] * self.N_genetic_categories # how many vals there are: 3 for 0,1,2 allele or 2 for 0,1
+        
+    #     if rng is None:
+    #         rng = getattr(self, 'global_rng', np.random.default_rng())
+    #     random_exploration = rng.dirichlet(alpha=alpha_vector, size=N_S)
+        
+    #     # Convex Combination blending: 
+    #     # w = 0.70 means the starting point is 70% anchored to the real dataset demographics
+    #     # and 30% dedicated to pure random exploration. 
+    #     # NOTE: If your experiments show too little exploration, drop w to 0.50.
+    #     w = 0.70 
+    #     #w = 0.30
+    #     genetic_weights_init = (w * genetic_weights_baseline) + ((1.0 - w) * random_exploration)
+        
+    #     # Numerical Safeguards:
+    #     # 1. Clip to ensure floating-point variances never create 0.0 or negative probabilities,
+    #     #    which would crash the log-likelihood calculation downstream.
+    #     genetic_weights_init = np.clip(genetic_weights_init, 1e-5, 1.0)
+        
+    #     # 2. Re-normalize row-wise to ensure that the mathematical integrity of the mixture prior 
+    #     #    is intact (every subtype row must sum strictly to 1.0).
+    #     genetic_weights_init /= np.sum(genetic_weights_init, axis=1, keepdims=True)
+        
+    #     return genetic_weights_init
     
     
     
@@ -1197,7 +1192,7 @@ class AbstractSustain(ABC):
             return this_ml_sequence, this_ml_f, this_ml_likelihood
 
     #********************************************
-    def _find_ml_mixture(self, sustainData, seq_init, f_init, genetic_weights_init = None):
+    def _find_ml_mixture(self, sustainData, seq_init, f_init):
         # Fit a mixture of models
         #
         #
@@ -1208,7 +1203,7 @@ class AbstractSustain(ABC):
 
         N_S                                 = seq_init.shape[0]
 
-        partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init, genetic_weights_init = genetic_weights_init)
+        partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
         pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
@@ -1233,6 +1228,7 @@ class AbstractSustain(ABC):
             ml_likelihood_mat[i]            = pool_output_list[i][2]
             
             # to ravel or not to ravel?
+            print('Shape of em lik hist find_ml_mixture_iteration',(pool_output_list[i][5]).shape)
             em_likelihood_histories[:,i]    = pool_output_list[i][5].ravel()
             
             if self.apoe_flag:
@@ -1247,6 +1243,8 @@ class AbstractSustain(ABC):
         ml_f                                = ml_f_mat[:, ix]
         ml_likelihood                       = ml_likelihood_mat[ix]
         
+        print('EM lik shape after',em_likelihood_histories.shape)
+        
         if self.apoe_flag:
             ml_genetic_weights              = ml_genetic_weights_mat[:,:,ix]
 
@@ -1254,11 +1252,17 @@ class AbstractSustain(ABC):
         else:
             return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat, em_likelihood_histories
 
-    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_seq, genetic_weights_init=None):
+    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_seq):
         #Convenience sub-function for above
-
+        
+        N_S = seq_init.shape[0]
         # Get process-appropriate Generator
         rng = np.random.default_rng(seed_seq)
+        
+        # initialise genetic weights for each startingpoint diff based on rng
+        if self.apoe_flag:
+            genetic_weights_init = self._initialise_genetic_weights(N_S,rng)
+            
         
         if self.apoe_flag:
             
@@ -1310,8 +1314,8 @@ class AbstractSustain(ABC):
     
     def _perform_em(self, sustainData, current_sequence, current_f, rng, current_genetic_weights=None):
         # allow method to be updated from input
-        #method = 'combined'
         method = 'alternating'
+        #method = 'combined'
         use_burn_in_phase = False
         
         if self.apoe_flag:
@@ -1464,6 +1468,7 @@ class AbstractSustain(ABC):
         ml_f                                = current_f
         ml_genetic_weights                  = current_genetic_weights
         ml_likelihood                       = current_likelihood
+        
         return ml_sequence, ml_f, ml_genetic_weights ,ml_likelihood, samples_sequence, samples_f, samples_genetics, samples_likelihood
     
     
