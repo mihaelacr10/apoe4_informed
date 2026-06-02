@@ -18,60 +18,13 @@ from scipy.stats import norm
 
 
 #generate the Z-score based event sequences for the desired number of subtypes (N_S)
-# def generate_random_Zscore_sustain_model(Z_vals, N_S):
-
-#     B                                   = Z_vals.shape[0]
-#     stage_zscore                        = np.array([y for x in Z_vals.T for y in x])
-#     stage_zscore                        = stage_zscore.reshape(1, len(stage_zscore))
-
-#     IX_select                           = stage_zscore > 0
-#     stage_zscore                        = stage_zscore[IX_select]
-#     stage_zscore                        = stage_zscore.reshape(1, len(stage_zscore))
-
-#     num_zscores                         = Z_vals.shape[1]
-#     IX_vals                             = np.array([[x for x in range(B)]] * num_zscores).T
-#     stage_biomarker_index               = np.array([y for x in IX_vals.T for y in x])
-#     stage_biomarker_index               = stage_biomarker_index.reshape(1, len(stage_biomarker_index))
-#     stage_biomarker_index               = stage_biomarker_index[IX_select]
-#     stage_biomarker_index               = stage_biomarker_index.reshape(1, len(stage_biomarker_index))
-
-#     N                                   = np.array(stage_zscore).shape[1]
-#     S                                   = np.zeros((N_S, N))
-#     for s in range(N_S):
-#         for i in range(N):
-#             IS_min_stage_zscore         = np.array([False] * N)
-#             possible_biomarkers         = np.unique(stage_biomarker_index)
-
-#             for j in range(len(possible_biomarkers)):
-#                 IS_unselected           = [False] * N
-
-#                 for k in set(range(N)) - set(S[s][:i]):
-#                     IS_unselected[k]    = True
-
-#                 this_biomarkers         = np.array([(np.array(stage_biomarker_index)[0] == possible_biomarkers[j]).astype(int) + (np.array(IS_unselected) == 1).astype(int)]) == 2
-#                 if not np.any(this_biomarkers):
-#                     this_min_stage_zscore = 0
-#                 else:
-#                     this_min_stage_zscore = min(stage_zscore[this_biomarkers])
-#                 if (this_min_stage_zscore):
-#                     temp                = ((this_biomarkers.astype(int) + (stage_zscore == this_min_stage_zscore).astype(int)) == 2).T
-#                     temp                = temp.reshape(len(temp), )
-#                     IS_min_stage_zscore[temp] = True
-
-#             events                      = np.array(range(N))
-#             possible_events             = np.array(events[IS_min_stage_zscore])
-#             this_index                  = np.ceil(np.random.rand() * ((len(possible_events)))) - 1
-#             S[s][i]                     = possible_events[int(this_index)]
-
-#     return S
-
 def generate_random_Zscore_sustain_model(Z_vals, N_S,rng=None):
     print(rng)
     if rng is None:
         rng = np.random.default_rng()
-        print('Rng random')
-    else:
-        print('Rng from before')
+        #print('Rng random')
+    #else:
+        #print('Rng from before')
 
     B                                   = Z_vals.shape[0]
     stage_zscore                        = np.array([y for x in Z_vals.T for y in x])
