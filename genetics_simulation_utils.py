@@ -80,15 +80,15 @@ def generate_ground_truth_genetic_weights(N_S_gt,
     return W_true
 
 
-def simulate_apoe_sustain_cohort(N = 5,              # number of biomarkers
-                                 M = 500,            # number of observations (e.g. subjects)
-                                 M_control = 100,    # number of these that are control subjects
-                                 N_S_gt = 2,         # number of ground truth subtypes
-                                 gt_f = None,        # subtype prevalence
-                                 W_true = None,      # genetic_weights
-                                 genetic_signal_strength = None, # 'strong', 'moderate' or 'uniform'
-                                 seed = None,        # seed number to keep sequence fixed
-                                 use_midpoints = False,
+def simulate_apoe_sustain_dataset(N = 5,                                         # number of biomarkers
+                                 M = 500,                                       # number of observations (e.g. subjects)
+                                 M_control = 100,                               # number of these that are control subjects
+                                 N_S_gt = 2,                                    # number of ground truth subtypes
+                                 gt_f = None,                                   # subtype prevalence
+                                 W_true = None,                                 # genetic_weights
+                                 genetic_signal_strength = None,                # 'strong', 'moderate' or 'uniform'
+                                 seed = None,                                   # seed number to keep sequence fixed
+                                 use_midpoints = False,                         # synthetic data function choice
                                  save = False,
                                  output_path = None,
                                  dataset_name = None,
@@ -185,6 +185,44 @@ def simulate_apoe_sustain_cohort(N = 5,              # number of biomarkers
         }
         with open(output_folder / f"{base_filename}.pkl", "wb") as f:
             pickle.dump(parameters, f)
+            
+            # NEW: Write out a beautiful, human-readable summary sheet
+        summary_txt_path = output_folder / f"{base_filename}_ground_truth.txt"
+        with open(summary_txt_path, "w", encoding="utf-8") as f:
+            f.write("==================================================\n")
+            f.write(f" GROUND TRUTH PARAMETERS: {dataset_name}\n")
+            f.write("==================================================\n\n")
+            
+            
+            f.write("🔹 SUBTYPE PREVALENCE FRACTIONS (gt_f):\n")
+            f.write(f"   {gt_f}\n\n")
+            
+            f.write("🔹 GENETIC WEIGHTS MATRIX (W_true):\n")
+            for i, row in enumerate(W_true):
+                f.write(f"   Subtype {i}: {np.round(row, 4).tolist()}\n")
+            f.write("\n")
+            
+            f.write("🔹 BIOMARKER STAGING ORDERINGS (gt_sequence):\n")
+            for i, seq in enumerate(gt_sequence):
+                f.write(f"   Subtype {i} Sequence: {seq.tolist()}\n")
+                
+            f.write("📋 COHORT PROPERTIES\n")
+            f.write(f"   • Total Sample Size (M)     : {M}\n")
+            f.write(f"   • Control Sample Size (M_0) : {M_control}\n")
+            f.write(f"   • Number of Biomarkers (N)  : {N}\n")
+            f.write(f"   • Total SuStaIn Stages (N_k): {N_k}\n")
+            f.write(f"   • True Subtype Count (N_S)  : {N_S_gt}\n\n")
+            
+            f.write("🔹 STRUCTURAL THRESHOLD MATRIX (Z_vals):\n")
+            f.write("   [Pos 1, Pos 2, Pos 3] per biomarker rows\n")
+            for i, row in enumerate(Z_vals):
+                f.write(f"   Biomarker {i}: {row.tolist()}\n")
+            f.write("\n")
+                
+            f.write("🔹 MAXIMUM PERMISSIBLE Z-SCORES (Z_max):\n")
+            f.write(f"   {Z_max.tolist()}\n")
+                
+        print(f"📄 Human-readable ground truth saved to: {summary_txt_path}")
 
     return df, Z_vals, Z_max, gt_sequence, gt_f, W_true
 
@@ -193,7 +231,7 @@ def simulate_apoe_sustain_cohort(N = 5,              # number of biomarkers
 # EXECUTION TEST RUN LOOP ENTRY POINT
 # -------------------------------------------------------------------------
 if __name__ == '__main__':
-    df, Z_vals, Z_max, gt_sequence, gt_f, W_true = simulate_apoe_sustain_cohort(
+    df, Z_vals, Z_max, gt_sequence, gt_f, W_true = simulate_apoe_sustain_dataset(
         N_S_gt=2,
         genetic_signal_strength='strong',
         #gt_f = np.array([0.20, 0.80]),

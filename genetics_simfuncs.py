@@ -96,6 +96,7 @@ def generate_data_Zscore_sustain(subtypes, stages, gt_ordering, Z_vals, Z_max):
     min_biomarker_zscore                = [0]*B
     max_biomarker_zscore                = Z_max
     std_biomarker_zscore                = [1]*B # [0]*B
+    #std_biomarker_zscore                = [0]*B
 
     N                                   = stage_biomarker_index.shape[1]
     N_S                                 = gt_ordering.shape[0]

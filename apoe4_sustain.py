@@ -901,6 +901,7 @@ class AbstractSustain(ABC):
                         ml_f_mat            = this_ml_f_mat[:, 0]
                         # we're not removing the startingpoint dimension bc we want the EM lik from all startingpoints
                         em_likelihood_histories = this_em_likelihood_histories
+                        #ml_likelihood_mat   = this_ml_likelihood_mat
                         
                         if self.apoe_flag:
                             ml_genetic_weights = this_ml_genetic_weights[:,:,0]
@@ -1033,6 +1034,7 @@ class AbstractSustain(ABC):
         # Shape output: (N_S, 3) representing [Genotype_0, Genotype_1, Genotype_2] per subtype.
         if rng is None:
             rng = getattr(self, 'global_rng', np.random.default_rng())
+            # get global
         alpha_vector = [1] * self.N_genetic_categories
         genetic_weights = rng.dirichlet(alpha=alpha_vector, size=N_S)
         
@@ -1227,8 +1229,6 @@ class AbstractSustain(ABC):
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
             
-            # to ravel or not to ravel?
-            print('Shape of em lik hist find_ml_mixture_iteration',(pool_output_list[i][5]).shape)
             em_likelihood_histories[:,i]    = pool_output_list[i][5].ravel()
             
             if self.apoe_flag:
@@ -1314,8 +1314,11 @@ class AbstractSustain(ABC):
     
     def _perform_em(self, sustainData, current_sequence, current_f, rng, current_genetic_weights=None):
         # allow method to be updated from input
-        method = 'alternating'
+        
+        method = self.em_loop_type
+        #method = 'alternating'
         #method = 'combined'
+        
         use_burn_in_phase = False
         
         if self.apoe_flag:
@@ -1326,10 +1329,10 @@ class AbstractSustain(ABC):
                 )
                 
             if method == 'alternating':
-                print('Using',method,'method' )
+                #print('Using',method,'method' )
                 return self._perform_em_alternating(sustainData, current_sequence, current_f, rng, current_genetic_weights)
             else:
-                print('Using',method,'method')
+                #print('Using',method,'method')
                 return self._perform_em_combined(sustainData, current_sequence, current_f, rng, current_genetic_weights)
 
         # Perform an E-M procedure to estimate parameters of SuStaIn model
@@ -1906,7 +1909,9 @@ class ZscoreSustain_APOE4(AbstractSustain):
                  use_parallel_startpoints,
                  seed=None,
                  apoe4_status=None, 
-                 apoe_flag=False):
+                 apoe_flag=False,
+                 em_loop_type = "combined" # or "alternating"
+                 ):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!
@@ -1930,6 +1935,8 @@ class ZscoreSustain_APOE4(AbstractSustain):
         # we take apoe4 carrier status as an input variable
         # apoe4_status                  - apoe4 allele carrier status, 0 or 1
         self.apoe_flag = apoe_flag
+        
+        self.em_loop_type = em_loop_type  # 'combined' or 'alternating'
         
         if self.apoe_flag:
             if apoe4_status is None:
