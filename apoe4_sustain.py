@@ -1014,9 +1014,17 @@ class AbstractSustain(ABC):
         else:
             return this_ml_sequence, this_ml_f, this_ml_likelihood, samples_likelihood
     
+    def _initialise_genetic_weights(self, N_S,rng=None):
+        
+        if self.genetic_init_method == 'random':
+            return self._initialise_genetic_weights_randomDirichlet(N_S,rng)
+        else:
+            return self._initialise_genetic_weights_cohort_perturb(N_S, rng)
+            
+    
     # Please try both initialisation methods in experiments to decide which one works better
     
-    def _initialise_genetic_weights(self, N_S,rng=None):
+    def _initialise_genetic_weights_randomDirichlet(self, N_S,rng=None):
         """
         Initialises genetic weights using a flat, unconstrained Dirichlet distribution.
         
@@ -1040,54 +1048,54 @@ class AbstractSustain(ABC):
         
         return genetic_weights
     
-    # def _initialise_genetic_weights(self,N_S, rng=None):
-    #     """
-    #     Initialises genetic weights by blending the true global population frequencies 
-    #     with a random Dirichlet matrix using a tunable mixing weight (w).
+    def _initialise_genetic_weights_cohort_perturb(self,N_S, rng=None):
+        """
+        Initialises genetic weights by blending the true global population frequencies 
+        with a random Dirichlet matrix using a tunable mixing weight (w).
         
-    #     EXPERIMENTAL BEHAVIOR TO TRACK:
-    #     - Space Exploration: BALANCED. Workers are structurally unique from each other,
-    #       but they stay clustered within a reasonable neighborhood of the population baseline.
-    #     - Convergence Speed: FASTER. Because the model begins near the true demographic 
-    #       gravity center of your dataset, it eliminates the "burn-in" iterations 
-    #       wasted on corrections, allowing the clinical sequence shuffler to get to work immediately.
-    #     """
-    #     # Fetch the pre-calculated global background rates of your non-null dataset
-    #     # e.g., returns a stable vector like [0.542, 0.361, 0.096]
-    #     global_frequencies = self._global_genetic_frequencies 
+        EXPERIMENTAL BEHAVIOR TO TRACK:
+        - Space Exploration: BALANCED. Workers are structurally unique from each other,
+          but they stay clustered within a reasonable neighborhood of the population baseline.
+        - Convergence Speed: FASTER. Because the model begins near the true demographic 
+          gravity center of your dataset, it eliminates the "burn-in" iterations 
+          wasted on corrections, allowing the clinical sequence shuffler to get to work immediately.
+        """
+        # Fetch the pre-calculated global background rates of your non-null dataset
+        # e.g., returns a stable vector like [0.542, 0.361, 0.096]
+        global_frequencies = self._global_genetic_frequencies 
         
-    #     # Replicate the global background row across all target subtypes.
-    #     # This acts as your "Exploitation" matrix (fully informed by reality).
-    #     # Shape: (N_S, 3)
-    #     genetic_weights_baseline = np.tile(global_frequencies, (N_S, 1))
+        # Replicate the global background row across all target subtypes.
+        # This acts as your "Exploitation" matrix (fully informed by reality).
+        # Shape: (N_S, 3)
+        genetic_weights_baseline = np.tile(global_frequencies, (N_S, 1))
         
-    #     # Generate a wide, unconstrained random Dirichlet matrix.
-    #     # This acts as your "Exploration" channel, adding unique variance to each parallel worker.
-    #     # Shape: (N_S, 3)
-    #     alpha_vector = [1] * self.N_genetic_categories # how many vals there are: 3 for 0,1,2 allele or 2 for 0,1
+        # Generate a wide, unconstrained random Dirichlet matrix.
+        # This acts as your "Exploration" channel, adding unique variance to each parallel worker.
+        # Shape: (N_S, 3)
+        alpha_vector = [1] * self.N_genetic_categories # how many vals there are: 3 for 0,1,2 allele or 2 for 0,1
         
-    #     if rng is None:
-    #         rng = getattr(self, 'global_rng', np.random.default_rng())
-    #     random_exploration = rng.dirichlet(alpha=alpha_vector, size=N_S)
+        if rng is None:
+            rng = getattr(self, 'global_rng', np.random.default_rng())
+        random_exploration = rng.dirichlet(alpha=alpha_vector, size=N_S)
         
-    #     # Convex Combination blending: 
-    #     # w = 0.70 means the starting point is 70% anchored to the real dataset demographics
-    #     # and 30% dedicated to pure random exploration. 
-    #     # NOTE: If your experiments show too little exploration, drop w to 0.50.
-    #     w = 0.70 
-    #     #w = 0.30
-    #     genetic_weights_init = (w * genetic_weights_baseline) + ((1.0 - w) * random_exploration)
+        # Convex Combination blending: 
+        # w = 0.70 means the starting point is 70% anchored to the real dataset demographics
+        # and 30% dedicated to pure random exploration. 
+        # NOTE: If your experiments show too little exploration, drop w to 0.50.
+        w = 0.70 
+        #w = 0.30
+        genetic_weights_init = (w * genetic_weights_baseline) + ((1.0 - w) * random_exploration)
         
-    #     # Numerical Safeguards:
-    #     # 1. Clip to ensure floating-point variances never create 0.0 or negative probabilities,
-    #     #    which would crash the log-likelihood calculation downstream.
-    #     genetic_weights_init = np.clip(genetic_weights_init, 1e-5, 1.0)
+        # Numerical Safeguards:
+        # 1. Clip to ensure floating-point variances never create 0.0 or negative probabilities,
+        #    which would crash the log-likelihood calculation downstream.
+        genetic_weights_init = np.clip(genetic_weights_init, 1e-5, 1.0)
         
-    #     # 2. Re-normalize row-wise to ensure that the mathematical integrity of the mixture prior 
-    #     #    is intact (every subtype row must sum strictly to 1.0).
-    #     genetic_weights_init /= np.sum(genetic_weights_init, axis=1, keepdims=True)
+        # 2. Re-normalize row-wise to ensure that the mathematical integrity of the mixture prior 
+        #    is intact (every subtype row must sum strictly to 1.0).
+        genetic_weights_init /= np.sum(genetic_weights_init, axis=1, keepdims=True)
         
-    #     return genetic_weights_init
+        return genetic_weights_init
     
     
     
@@ -1910,7 +1918,8 @@ class ZscoreSustain_APOE4(AbstractSustain):
                  seed=None,
                  apoe4_status=None, 
                  apoe_flag=False,
-                 em_loop_type = "combined" # or "alternating"
+                 em_loop_type = "combined", # or "alternating"
+                 genetic_init_method = "random" # or "cohort_perturb"
                  ):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
@@ -1937,6 +1946,8 @@ class ZscoreSustain_APOE4(AbstractSustain):
         self.apoe_flag = apoe_flag
         
         self.em_loop_type = em_loop_type  # 'combined' or 'alternating'
+        
+        self.genetic_init_method = genetic_init_method
         
         if self.apoe_flag:
             if apoe4_status is None:

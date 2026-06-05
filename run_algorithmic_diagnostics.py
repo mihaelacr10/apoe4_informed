@@ -32,7 +32,7 @@ def run_diagnostic_benchmark(num_seeds=5):
     all_seed_metrics = []
     
     N_biomarkers = 5
-    N_S_max = 2 # 2
+    N_S_max = 3 # 2
     #N_startpoints = 15
     N_startpoints = 15
     N_iterations_MCMC = int(1e3) #int(1e4)
@@ -44,7 +44,7 @@ def run_diagnostic_benchmark(num_seeds=5):
         print("=========================================")
         
         # Base directory isolated specifically for this experiment
-        base_sim_path = Path("experiments") / "01_algorithmic_diagnostics" / "outputs"
+        base_sim_path = Path("experiments") / "01_algorithmic_diagnostics" 
         
         # Unique folder per dataset fold inside the diagnostics directory
         dataset_name = f"diagnostic_seed_{seed_idx}"
@@ -182,7 +182,7 @@ def run_diagnostic_benchmark(num_seeds=5):
         axes[0].plot(combined_histories, alpha=0.7, linewidth=1.5)
         axes[0].axhline(y=true_max_lik, color="black", linestyle=":", linewidth=2, zorder=5,
                         label=f"True Max Lik ({true_max_lik:.2f})")
-        axes[0].set_xlim(-2, 100)
+        #axes[0].set_xlim(-2, 100)
         axes[0].set_title(f"Combined EM Loop ('combined')\n(All {N_startpoints} Multi-Starts)", fontsize=11, fontweight='bold')
         axes[0].set_xlabel('EM Iteration Step', fontsize=10)
         axes[0].set_ylabel('Log-Likelihood', fontsize=10)
@@ -193,7 +193,7 @@ def run_diagnostic_benchmark(num_seeds=5):
         axes[1].plot(alternating_histories, alpha=0.7, linewidth=1.5, linestyle='--')
         axes[1].axhline(y=true_max_lik, color="black", linestyle=":", linewidth=2, zorder=5,
                         label=f"True Max Lik ({true_max_lik:.2f})")
-        axes[1].set_xlim(-2, 100)
+        #axes[1].set_xlim(-2, 100)
         axes[1].set_title(f"Alternating EM Loops ('alternating')\n(All {N_startpoints} Multi-Starts)", fontsize=11, fontweight='bold')
         axes[1].set_xlabel('EM Iteration Step', fontsize=10)
         axes[1].grid(True, linestyle=':', alpha=0.6)
@@ -257,4 +257,4 @@ def run_diagnostic_benchmark(num_seeds=5):
 
 if __name__ == '__main__':
     # Start with 5 seeds to quickly verify your logic paths
-    run_diagnostic_benchmark(num_seeds=5)
+    run_diagnostic_benchmark(num_seeds=1)

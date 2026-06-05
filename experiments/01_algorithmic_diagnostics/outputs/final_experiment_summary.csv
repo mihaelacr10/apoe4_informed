@@ -1,7 +1,0 @@
-Seed,True_Max_Lik,Combined_Success,Combined_Avg_Iters,Combined_Avg_Iters_Succ,Alternating_Success,Alternating_Avg_Iters,Alternating_Avg_Iters_Succ
-Seed 0,-4858.99,15/15,7.1,7.1,15/15,7.3,7.3
-Seed 1,-4852.47,15/15,16.7,16.7,15/15,14.3,14.3
-Seed 2,-4940.08,15/15,6.3,6.3,15/15,6.7,6.7
-Seed 3,-4841.56,15/15,14.1,14.1,15/15,29.8,29.8
-Seed 4,-4970.37,15/15,5.6,5.6,15/15,5.6,5.6
-AVERAGE,-4892.7,15.0/15,9.9,9.9,15.0/15,12.7,12.7
