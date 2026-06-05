@@ -1,0 +1,33 @@
+==================================================
+ GROUND TRUTH PARAMETERS: diagnostic_seed_5
+==================================================
+
+🔹 SUBTYPE PREVALENCE FRACTIONS (gt_f):
+   [0.4444444444444444, 0.3333333333333333, 0.2222222222222222]
+
+🔹 GENETIC WEIGHTS MATRIX (W_true):
+   Subtype 0: [0.4885, 0.1006, 0.4109]
+   Subtype 1: [0.1764, 0.67, 0.1536]
+   Subtype 2: [0.1666, 0.3116, 0.5219]
+
+🔹 BIOMARKER STAGING ORDERINGS (gt_sequence):
+   Subtype 0 Sequence: [4.0, 9.0, 2.0, 1.0, 0.0, 5.0, 7.0, 3.0, 6.0, 14.0, 11.0, 8.0, 12.0, 13.0, 10.0]
+   Subtype 1 Sequence: [4.0, 1.0, 3.0, 8.0, 0.0, 6.0, 5.0, 13.0, 2.0, 10.0, 11.0, 7.0, 12.0, 9.0, 14.0]
+   Subtype 2 Sequence: [3.0, 0.0, 4.0, 5.0, 2.0, 7.0, 12.0, 8.0, 1.0, 10.0, 9.0, 14.0, 6.0, 11.0, 13.0]
+📋 COHORT PROPERTIES
+   • Total Sample Size (M)     : 500
+   • Control Sample Size (M_0) : 100
+   • Number of Biomarkers (N)  : 5
+   • Total SuStaIn Stages (N_k): 16
+   • True Subtype Count (N_S)  : 3
+
+🔹 STRUCTURAL THRESHOLD MATRIX (Z_vals):
+   [Pos 1, Pos 2, Pos 3] per biomarker rows
+   Biomarker 0: [1, 2, 3]
+   Biomarker 1: [1, 2, 3]
+   Biomarker 2: [1, 2, 3]
+   Biomarker 3: [1, 2, 3]
+   Biomarker 4: [1, 2, 3]
+
+🔹 MAXIMUM PERMISSIBLE Z-SCORES (Z_max):
+   [5, 5, 5, 5, 5]

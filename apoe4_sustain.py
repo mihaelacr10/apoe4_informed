@@ -1918,7 +1918,7 @@ class ZscoreSustain_APOE4(AbstractSustain):
                  seed=None,
                  apoe4_status=None, 
                  apoe_flag=False,
-                 em_loop_type = "combined", # or "alternating"
+                 em_loop_type =  "alternating" , # or"combined"
                  genetic_init_method = "random" # or "cohort_perturb"
                  ):
         # The initializer for the z-score based events implementation of AbstractSustain
